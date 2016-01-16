@@ -47,17 +47,21 @@ Use this program with caution.  Few programs need to be this dynamic.  This pack
 
 Click the "Download ZIP" button, extract the files, CD to the directory with those files, connect to SQL*Plus, and run these commands:
 
-1. Install objects and packages on the desired schema:
+1. Install Method4:
 
         @install
 
-2. Install unit tests (optional):
+2. Unintall Method4:
+
+        @uninstall
+
+3. Install unit tests (optional, only useful for development):
 
         @tests/install_unit_tests
 
-3. Unintall
+4. Uninstall unit tests (optional, only useful for development):
 
-        @uninstall
+        @tests/uninstall_unit_tests
 
 ## Credit
 

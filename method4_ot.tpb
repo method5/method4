@@ -16,29 +16,35 @@ CREATE OR REPLACE TYPE BODY method4_ot AS
 		--pre-defind table of varchar2(4000).
 		sql_statements sys.ku$_vcnt;
 	begin
-		--TODO: Use caching to prevent re-running this.
-
-
 		--Re-evaluate the sql as a group of select statements if the flag is set.
 		if trim(upper(re_eval)) = 'YES' then
-			--Get all the statements.
-			execute immediate stmt
-			bulk collect into sql_statements;
+			--Use cached statement if available.
+			if method4.r_statement_cache.exists(stmt) then
+				v_new_stmt := method4.r_statement_cache(stmt);
+			--Else retrieve the statement.
+			else
+				--Get all the statements.
+				execute immediate stmt
+				bulk collect into sql_statements;
 
-			--Throw error if it returned no rows.
-			if sql_statements.count = 0 then
-				raise_application_error(-20000, 'The SQL statement did not generate any other SQL statements.');
-			end if;
-
-			--Convert them into a single large union-all statement.
-			for i in 1 .. sql_statements.count loop
-				if i = 1 then
-					v_new_stmt := sql_statements(i);
-				else
-					v_new_stmt := v_new_stmt || chr(10) || 'union all' || chr(10) || sql_statements(i);
+				--Throw error if it returned no rows.
+				if sql_statements.count = 0 then
+					raise_application_error(-20000, 'The SQL statement did not generate any other SQL statements.');
 				end if;
-			end loop;
-		--Do nothing to string
+
+				--Convert them into a single large union-all statement.
+				for i in 1 .. sql_statements.count loop
+					if i = 1 then
+						v_new_stmt := sql_statements(i);
+					else
+						v_new_stmt := v_new_stmt || chr(10) || 'union all' || chr(10) || sql_statements(i);
+					end if;
+				end loop;
+
+				--Save it in the cache.
+				method4.r_statement_cache(stmt) := v_new_stmt;
+			end if;
+		--Do nothing to string if no re-evaluation.
 		elsif trim(upper(re_eval)) = 'NO' then
 			v_new_stmt := stmt;
 		--Else throw error that string is unexpected.
@@ -190,6 +196,9 @@ CREATE OR REPLACE TYPE BODY method4_ot AS
       DBMS_SQL.DESCRIBE_COLUMNS2( method4.r_sql.cursor,
                                   method4.r_sql.column_cnt,
                                   method4.r_sql.description );
+
+      --Remove statement from the cache.
+      method4.r_statement_cache.delete(stmt);
 
       FOR i IN 1 .. method4.r_sql.column_cnt LOOP
 
@@ -453,6 +462,7 @@ CREATE OR REPLACE TYPE BODY method4_ot AS
       DBMS_SQL.CLOSE_CURSOR( method4.r_sql.cursor );
       method4.r_sql := NULL;
       RETURN ODCIConst.Success;
+
    END;
 
 END;

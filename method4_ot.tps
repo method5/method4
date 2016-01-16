@@ -1,4 +1,4 @@
-CREATE OR REPLACE TYPE method4_ot AS OBJECT
+CREATE OR REPLACE TYPE method4_ot AUTHID CURRENT_USER AS OBJECT
 (
   atype ANYTYPE --<-- transient record type
 
