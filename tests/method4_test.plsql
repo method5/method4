@@ -44,22 +44,46 @@ end assert_equals;
 --------------------------------------------------------------------------------
 procedure test_convert_to_text is
 begin
+	--Simple.
+	declare
+		actual varchar2(1);
+	begin
+		execute immediate
+		q'<
+			select *
+			from table(method4.run('select * from dual'))
+		>'
+		into actual;
+
+		assert_equals('Simple.', 'X', actual);
+	end;
+
 	--TODO
 
-	--Simple
+	--Calling with second parameter other than YES or NO raises an exception.
+	declare
+		actual varchar2(1);
+	begin
+		execute immediate
+		q'<
+			select *
+			from table(method4.run('select * from dual', 'FALSE'))
+		>'
+		into actual;
+
+		assert_equals('Simple.', 'X', actual);
+	end;
 
 	--Different datatypes.
 
 	--DBA objects.
 
+	--Long column names.
 
 	--Re-evaluation, only one query.
 
 	--Re-evaluation, multiple queries.
 
-
-
-	assert_equals('Convert To Text 1' ,'1', '1');
 end test_convert_to_text;
 
 
