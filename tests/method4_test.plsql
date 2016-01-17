@@ -58,11 +58,11 @@ begin
 		assert_equals('Simple.', 'X', actual);
 	end;
 
-	--TODO
-
 	--Calling with second parameter other than YES or NO raises an exception.
 	declare
 		actual varchar2(1);
+		bad_parmaeter exception;
+		pragma exception_init(bad_parmaeter, -20000);
 	begin
 		execute immediate
 		q'<
@@ -71,8 +71,12 @@ begin
 		>'
 		into actual;
 
-		assert_equals('Simple.', 'X', actual);
+		assert_equals('Exception for bad parameter.', 'Exception', 'No exception');
+	exception when bad_parmaeter then
+		assert_equals('Exception for bad parameter.', 'Exception', 'Exception');
 	end;
+
+	--TODO
 
 	--Different datatypes.
 

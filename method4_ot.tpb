@@ -218,6 +218,12 @@ CREATE OR REPLACE TYPE BODY method4_ot AS
                   method4.r_sql.cursor, i, '', 32767
                   );
             --<>--
+            WHEN DBMS_TYPES.TYPECODE_NVARCHAR2
+            THEN
+               DBMS_SQL.DEFINE_COLUMN(
+                  method4.r_sql.cursor, i, '', 32767
+                  );
+            --<>--
             WHEN DBMS_TYPES.TYPECODE_NUMBER
             THEN
                DBMS_SQL.DEFINE_COLUMN(
@@ -359,6 +365,13 @@ CREATE OR REPLACE TYPE BODY method4_ot AS
                      method4.r_sql.cursor, i, r_fetch.v2_column
                      );
                   rws.SetVarchar2( r_fetch.v2_column );
+               --<>--
+               WHEN DBMS_TYPES.TYPECODE_NVARCHAR2
+               THEN
+                  DBMS_SQL.COLUMN_VALUE(
+                     method4.r_sql.cursor, i, r_fetch.v2_column
+                     );
+                  rws.SetNVarchar2( r_fetch.v2_column );
                --<>--
                WHEN DBMS_TYPES.TYPECODE_NUMBER
                THEN
