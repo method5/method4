@@ -118,8 +118,18 @@ CREATE OR REPLACE TYPE BODY method4_ot AS
                              THEN DBMS_TYPES.TYPECODE_TIMESTAMP_LTZ
                              --<>--
                           END,
-                          r_sql.description(i).col_precision,
-                          r_sql.description(i).col_scale,
+                          --Float and Number share the same col_type, 2.
+                          --Convert FLOAT to NUMBER by changing scale and precision.
+                          CASE
+                             WHEN r_sql.description(i).col_type = 2 AND r_sql.description(i).col_precision > 0 AND r_sql.description(i).col_scale = -127
+                             THEN 0
+                             ELSE r_sql.description(i).col_precision
+                          END,
+                          CASE
+                             WHEN r_sql.description(i).col_type = 2 AND r_sql.description(i).col_precision > 0 AND r_sql.description(i).col_scale = -127
+                             THEN -127
+                             ELSE r_sql.description(i).col_scale
+                          END,
                           CASE r_sql.description(i).col_type
                              WHEN 11
                              THEN 32
@@ -225,6 +235,12 @@ CREATE OR REPLACE TYPE BODY method4_ot AS
                   );
             --<>--
             WHEN DBMS_TYPES.TYPECODE_NUMBER
+            THEN
+               DBMS_SQL.DEFINE_COLUMN(
+                  method4.r_sql.cursor, i, CAST(NULL AS NUMBER)
+                  );
+            --<FLOAT - convert to NUMBER.>--
+            WHEN 4
             THEN
                DBMS_SQL.DEFINE_COLUMN(
                   method4.r_sql.cursor, i, CAST(NULL AS NUMBER)
@@ -374,6 +390,13 @@ CREATE OR REPLACE TYPE BODY method4_ot AS
                   rws.SetNVarchar2( r_fetch.v2_column );
                --<>--
                WHEN DBMS_TYPES.TYPECODE_NUMBER
+               THEN
+                  DBMS_SQL.COLUMN_VALUE(
+                     method4.r_sql.cursor, i, r_fetch.num_column
+                     );
+                  rws.SetNumber( r_fetch.num_column );
+               --<FLOAT - convert to NUMBER.>--
+               WHEN 4
                THEN
                   DBMS_SQL.COLUMN_VALUE(
                      method4.r_sql.cursor, i, r_fetch.num_column

@@ -76,9 +76,46 @@ begin
 		assert_equals('Exception for bad parameter.', 'Exception', 'Exception');
 	end;
 
+	--Number.
+	declare
+		actual1 number;
+		actual2 number;
+		actual3 number;
+	begin
+		execute immediate
+		q'<
+			select *
+			from table(method4.run('select 1.1, cast(2.2 as number(10, 1)), 3 from dual'))
+		>'
+		into actual1, actual2, actual3;
+
+		assert_equals('Number 1.', '1.1', actual1);
+		assert_equals('Number 2.', '2.2', actual2);
+		assert_equals('Number 3.', '3', actual3);
+	end;
+
+	--Float.
+	declare
+		actual1 float;
+		actual2 float;
+		actual3 float;
+	begin
+		execute immediate
+		q'<
+			select *
+			from table(method4.run('select cast(100.001 as float), cast(20.02 as float(100)), cast(3 as float(1)) from dual'))
+		>'
+		into actual1, actual2, actual3;
+
+		assert_equals('Number 1.', '100.001', actual1);
+		assert_equals('Number 2.', '20.02', actual2);
+		assert_equals('Number 3.', '3', actual3);
+	end;
+
+	--Other types.
+
 	--TODO
 
-	--Different datatypes.
 
 	--DBA objects.
 
