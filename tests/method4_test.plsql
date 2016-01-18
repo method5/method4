@@ -76,6 +76,46 @@ begin
 		assert_equals('Exception for bad parameter.', 'Exception', 'Exception');
 	end;
 
+	-------------------------------------------------------------------------------
+	--Listed in order of "Table 2-1 Built-in Data Type Summary" from SQL Language Reference.
+	-------------------------------------------------------------------------------
+
+	--Varchar2.
+	declare
+		actual1 varchar2(1);
+		actual2 varchar2(100);
+		actual3 varchar2(4000);
+	begin
+		execute immediate
+		q'<
+			select *
+			from table(method4.run('select ''A'', cast(''B'' as varchar2(1)), lpad(''C'', 4000, ''C'') from dual'))
+		>'
+		into actual1, actual2, actual3;
+
+		assert_equals('Varchar2 1.', 'A', actual1);
+		assert_equals('Varchar2 2.', 'B', actual2);
+		assert_equals('Varchar2 3.', lpad('C', 4000, 'C'), actual3);
+	end;
+
+	--NVarchar2.
+	declare
+		actual1 nvarchar2(1);
+		actual2 nvarchar2(100);
+		actual3 nvarchar2(4000);
+	begin
+		execute immediate
+		q'<
+			select *
+			from table(method4.run('select n''A'', cast(''B'' as nvarchar2(1)), lpad(n''C'', 1000, n''C'') from dual'))
+		>'
+		into actual1, actual2, actual3;
+
+		assert_equals('Varchar2 1.', n'A', actual1);
+		assert_equals('Varchar2 2.', n'B', actual2);
+		assert_equals('Varchar2 3.', lpad(n'C', 1000, n'C'), actual3);
+	end;
+
 	--Number.
 	declare
 		actual1 number;
@@ -111,6 +151,37 @@ begin
 		assert_equals('Number 2.', '20.02', actual2);
 		assert_equals('Number 3.', '3', actual3);
 	end;
+
+/*
+LONG
+DATE
+SYSDATE (not in types, but worth checking)
+BINARY_FLOAT
+BINARY_DOUBLE
+TIMESTAMP [(fractional_seconds_precision)]
+TIMESTAMP [(fractional_seconds_precision)] WITH TIME ZONE
+TIMESTAMP [(fractional_seconds_precision)] WITH LOCAL TIME ZONE
+SYSTIMESTAMP (in case it's different than a regular timestamp)
+INTERVAL YEAR [(year_precision)] TO MONTH
+INTERVAL DAY [(day_precision)] TO SECOND [(fractional_seconds_precision)]
+RAW(size)
+LONG RAW
+ROWID
+UROWID [(size)]
+CHAR [(size [BYTE | CHAR])]
+NCHAR[(size)]
+CLOB
+NCLOB
+BLOB
+BFILE
+
+REF?
+TYPE
+NESTED TABLE
+XMLType
+ANYDATA
+*/
+
 
 	--Other types.
 
