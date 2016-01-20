@@ -76,6 +76,22 @@ begin
 		assert_equals('Exception for bad parameter.', 'Exception', 'Exception');
 	end;
 
+	--DBA objects.
+	declare
+		actual number;
+	begin
+		execute immediate q'<select * from table(method4.run('select count(*) from dba_users where rownum = 1'))>'
+		into actual;
+		assert_equals('DBA objects.', '1', actual);
+	end;
+
+	--Long column names.
+
+	--Re-evaluation, only one query.
+
+	--Re-evaluation, multiple queries.
+
+
 	-------------------------------------------------------------------------------
 	--Listed in order of "Table 2-1 Built-in Data Type Summary" from SQL Language Reference.
 	-------------------------------------------------------------------------------
@@ -111,9 +127,9 @@ begin
 		>'
 		into actual1, actual2, actual3;
 
-		assert_equals('Varchar2 1.', n'A', actual1);
-		assert_equals('Varchar2 2.', n'B', actual2);
-		assert_equals('Varchar2 3.', lpad(n'C', 1000, n'C'), actual3);
+		assert_equals('NVarchar2 1.', n'A', actual1);
+		assert_equals('NVarchar2 2.', n'B', actual2);
+		assert_equals('NVarchar2 3.', lpad(n'C', 1000, n'C'), actual3);
 	end;
 
 	--Number.
@@ -147,13 +163,27 @@ begin
 		>'
 		into actual1, actual2, actual3;
 
-		assert_equals('Number 1.', '100.001', actual1);
-		assert_equals('Number 2.', '20.02', actual2);
-		assert_equals('Number 3.', '3', actual3);
+		assert_equals('Float 1.', '100.001', actual1);
+		assert_equals('Float 2.', '20.02', actual2);
+		assert_equals('Float 3.', '3', actual3);
+	end;
+
+	--Long.
+	--This view is the same in 11g and 12c, hopefully it's the same in all versions.
+	declare
+		actual1 clob;
+	begin
+		execute immediate
+		q'<
+			select *
+			from table(method4.run('select text from dba_views where view_name = ''DBA_EXP_VERSION'''))
+		>'
+		into actual1;
+
+		assert_equals('Long 1.', 'select o.expid'||chr(10)||'from sys.incvid o', actual1);
 	end;
 
 /*
-LONG
 DATE
 SYSDATE (not in types, but worth checking)
 BINARY_FLOAT
@@ -188,13 +218,6 @@ ANYDATA
 	--TODO
 
 
-	--DBA objects.
-
-	--Long column names.
-
-	--Re-evaluation, only one query.
-
-	--Re-evaluation, multiple queries.
 
 end test_convert_to_text;
 
