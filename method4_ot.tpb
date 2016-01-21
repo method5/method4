@@ -84,7 +84,12 @@ CREATE OR REPLACE TYPE BODY method4_ot AS
 
       FOR i IN 1 .. r_sql.column_cnt LOOP
 
-         v_rtype.AddAttr( r_sql.description(i).col_name,
+         v_rtype.AddAttr(
+                          --Column names can be over 30 bytes if an expression was used.
+                          --If the length is more than 30 the query will generate the error
+                          --"ORA-00902: invalid datatype" without a line number.
+                          --I'm not sure why or where it breaks, but this fixes it.
+                          substr(r_sql.description(i).col_name, 1, 30),
                           CASE
                              --<>--
                              WHEN r_sql.description(i).col_type IN (1,96,11,208)
@@ -101,6 +106,9 @@ CREATE OR REPLACE TYPE BODY method4_ot AS
                              --<>--
                              WHEN r_sql.description(i).col_type = 23
                              THEN DBMS_TYPES.TYPECODE_RAW
+                             --<>--
+                             WHEN r_sql.description(i).col_type = 100
+                             THEN DBMS_TYPES.TYPECODE_BFLOAT
                              --<>--
                              WHEN r_sql.description(i).col_type = 180
                              THEN DBMS_TYPES.TYPECODE_TIMESTAMP
@@ -219,7 +227,7 @@ CREATE OR REPLACE TYPE BODY method4_ot AS
                                i, r_meta.precision, r_meta.scale, r_meta.length,
                                r_meta.csid, r_meta.csfrm, r_meta.type, r_meta.name
                                );
-write_log(r_meta.name);
+
          CASE r_meta.typecode
             --<>--
             WHEN DBMS_TYPES.TYPECODE_VARCHAR2
@@ -244,6 +252,12 @@ write_log(r_meta.name);
             THEN
                DBMS_SQL.DEFINE_COLUMN(
                   method4.r_sql.cursor, i, CAST(NULL AS NUMBER)
+                  );
+            --<>--
+            WHEN DBMS_TYPES.TYPECODE_BFLOAT
+            THEN
+               DBMS_SQL.DEFINE_COLUMN(
+                  method4.r_sql.cursor, i, CAST(NULL AS BINARY_FLOAT)
                   );
             --<>--
             WHEN DBMS_TYPES.TYPECODE_DATE

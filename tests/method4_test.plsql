@@ -101,7 +101,13 @@ begin
 		assert_equals('Long, default column name with 30 bytes.', '1', actual);
 	end;
 
-
+	declare
+		actual number;
+	begin
+		execute immediate q'<select * from table(method4.run('select count(*)+0+0+0+0+0+0+0+0+0+0+0+0+0+0+0+0+0+0+0+0+0+0 from dba_users where rownum = 1'))>'
+		into actual;
+		assert_equals('Long, default column name with > 30 bytes.', '1', actual);
+	end;
 
 	--Re-evaluation, only one query.
 
@@ -199,10 +205,43 @@ begin
 		assert_equals('Long 1.', 'select o.expid'||chr(10)||'from sys.incvid o', actual1);
 	end;
 
+	--Date.
+	--Note that SYSDATE is not always the same as DATE and worth testing.
+	declare
+		actual1 date;
+		actual2 date;
+		actual3 date;
+	begin
+		execute immediate
+		q'<
+			select *
+			from table(method4.run('select date ''2000-01-01'', to_date(''2000-01-02'', ''YYYY-MM-DD''), sysdate from dual'))
+		>'
+		into actual1, actual2, actual3;
+
+		assert_equals('Date 1.', '2000-01-01', to_char(actual1, 'YYYY-MM-DD'));
+		assert_equals('Date 2.', '2000-01-02', to_char(actual2, 'YYYY-MM-DD'));
+		assert_equals('Date 3.', to_char(sysdate, 'YYYY-MM-DD'), to_char(actual3, 'YYYY-MM-DD'));
+	end;
+
+	--BINARY_FLOAT.
+	declare
+		actual1 binary_float;
+		actual2 binary_float;
+	begin
+		execute immediate
+		q'<
+			select *
+			from table(method4.run('select 1.1f, cast(2.2 as binary_float) from dual'))
+		>'
+		into actual1, actual2;
+
+		assert_equals('BINARY_FLOAT 1.', '1.1', trim(to_char(actual1, '9.9')));
+		assert_equals('BINARY_FLOAT 2.', '2.2', trim(to_char(actual2, '9.9')));
+	end;
+
+
 /*
-DATE
-SYSDATE (not in types, but worth checking)
-BINARY_FLOAT
 BINARY_DOUBLE
 TIMESTAMP [(fractional_seconds_precision)]
 TIMESTAMP [(fractional_seconds_precision)] WITH TIME ZONE
