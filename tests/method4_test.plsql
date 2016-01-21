@@ -11,6 +11,13 @@ begin
 	method4_test.run;
 end;
 
+When testing it is often helpful to run this block first:
+
+begin
+	dbms_session.reset_package;
+	execute immediate 'alter system flush shared_pool';
+end;
+
 */
 
 --Run the unit tests and display the results in dbms output.
@@ -86,6 +93,15 @@ begin
 	end;
 
 	--Long column names.
+	declare
+		actual number;
+	begin
+		execute immediate q'<select * from table(method4.run('select count(*)+0+0+0+0+0+0+0+0+0+0+0 from dba_users where rownum = 1'))>'
+		into actual;
+		assert_equals('Long, default column name with 30 bytes.', '1', actual);
+	end;
+
+
 
 	--Re-evaluation, only one query.
 
@@ -211,13 +227,6 @@ NESTED TABLE
 XMLType
 ANYDATA
 */
-
-
-	--Other types.
-
-	--TODO
-
-
 
 end test_convert_to_text;
 

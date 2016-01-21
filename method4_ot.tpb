@@ -219,7 +219,7 @@ CREATE OR REPLACE TYPE BODY method4_ot AS
                                i, r_meta.precision, r_meta.scale, r_meta.length,
                                r_meta.csid, r_meta.csfrm, r_meta.type, r_meta.name
                                );
-
+write_log(r_meta.name);
          CASE r_meta.typecode
             --<>--
             WHEN DBMS_TYPES.TYPECODE_VARCHAR2

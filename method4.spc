@@ -77,7 +77,9 @@ CREATE OR REPLACE PACKAGE method4 AS
    , csfrm     PLS_INTEGER
    , schema    VARCHAR2(30)
    , type      ANYTYPE
-   , name      VARCHAR2(30)
+   --This must be 31, not 30.
+   --For weird column names ANYTYPE.GetAttrElemInfo returns 31 bytes instead of 30.
+   , name      VARCHAR2(31)
    , version   VARCHAR2(30)
    , attr_cnt  PLS_INTEGER
    , attr_type ANYTYPE
