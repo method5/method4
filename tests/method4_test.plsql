@@ -240,13 +240,81 @@ begin
 		assert_equals('BINARY_FLOAT 2.', '2.2', trim(to_char(actual2, '9.9')));
 	end;
 
+	--BINARY_DOUBLE.
+	declare
+		actual1 binary_double;
+		actual2 binary_double;
+	begin
+		execute immediate
+		q'<
+			select *
+			from table(method4.run('select 1.1d, cast(2.2 as binary_double) from dual'))
+		>'
+		into actual1, actual2;
+
+		assert_equals('BINARY_DOUBLE 1.', '1.1', trim(to_char(actual1, '9.9')));
+		assert_equals('BINARY_DOUBLE 2.', '2.2', trim(to_char(actual2, '9.9')));
+	end;
+
+	--TIMESTAMP [(fractional_seconds_precision)]
+	--Note that SYSTIMESTAMP is not always the same as TIMESTAMP and worth testing.
+	declare
+		actual1 timestamp(9);
+		actual2 timestamp(9);
+		actual3 timestamp(9);
+		actual4 timestamp(9);
+		actual5 timestamp(9);
+	begin
+		execute immediate
+		q'<
+			select *
+			from table(method4.run('
+				select
+					timestamp ''2000-01-01 12:34:56'',
+					to_timestamp(''2000-01-02 12:34:56'', ''YYYY-MM-DD HH24:MI:SS''),
+					to_timestamp(''2000-01-01 12:00:00.123456789'', ''YYYY-MM-DD HH24:MI:SS.FF9''),
+					cast(date ''2000-01-01'' as timestamp(3)),
+					systimestamp
+				from dual'))
+		>'
+		into actual1, actual2, actual3, actual4, actual5;
+
+		assert_equals('Timestamp 1.', '2000-01-01 12:34:56', to_char(actual1, 'YYYY-MM-DD HH24:MI:SS'));
+		assert_equals('Timestamp 2.', '2000-01-02 12:34:56', to_char(actual2, 'YYYY-MM-DD HH24:MI:SS'));
+		assert_equals('Timestamp 3.', '2000-01-01 12:00:00.123456789', to_char(actual3, 'YYYY-MM-DD HH24:MI:SS.FF9'));
+		assert_equals('Timestamp 4.', '2000-01-01', to_char(actual1, 'YYYY-MM-DD'));
+		assert_equals('Timestamp 5.', to_char(systimestamp, 'YYYY-MM-DD HH24'), to_char(actual5, 'YYYY-MM-DD HH24'));
+	end;
+
+	--TIMESTAMP [(fractional_seconds_precision)] WITH TIME ZONE
+	declare
+		actual1 timestamp(9) with time zone;
+		actual2 timestamp(9) with time zone;
+		actual3 timestamp(9) with time zone;
+		actual4 timestamp(9) with time zone;
+	begin
+		execute immediate
+		q'<
+			select *
+			from table(method4.run('
+				select
+					timestamp ''2000-01-01 12:34:56 +01:00'',
+					timestamp ''2000-01-02 12:34:56 US/Eastern'',
+					cast(date ''2000-01-04'' as timestamp(9) with time zone),
+					cast(null as timestamp(9) with time zone)
+				from dual'))
+		>'
+		into actual1, actual2, actual3, actual4;
+
+		assert_equals('Timestamp with time zone 1.', '2000-01-01 12:34:56 +01:00', to_char(actual1, 'YYYY-MM-DD HH24:MI:SS TZH:TZM'));
+		assert_equals('Timestamp with time zone 2.', '2000-01-02 12:34:56 US/EASTERN', to_char(actual2, 'YYYY-MM-DD HH24:MI:SS TZR'));
+		assert_equals('Timestamp with time zone 3.', '2000-01-04 00:00:00', to_char(actual3, 'YYYY-MM-DD HH24:MI:SS'));
+		assert_equals('Timestamp with time zone 4.', '', actual4);
+	end;
+
 
 /*
-BINARY_DOUBLE
-TIMESTAMP [(fractional_seconds_precision)]
-TIMESTAMP [(fractional_seconds_precision)] WITH TIME ZONE
 TIMESTAMP [(fractional_seconds_precision)] WITH LOCAL TIME ZONE
-SYSTIMESTAMP (in case it's different than a regular timestamp)
 INTERVAL YEAR [(year_precision)] TO MONTH
 INTERVAL DAY [(day_precision)] TO SECOND [(fractional_seconds_precision)]
 RAW(size)

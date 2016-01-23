@@ -110,6 +110,9 @@ CREATE OR REPLACE TYPE BODY method4_ot AS
                              WHEN r_sql.description(i).col_type = 100
                              THEN DBMS_TYPES.TYPECODE_BFLOAT
                              --<>--
+                             WHEN r_sql.description(i).col_type = 101
+                             THEN DBMS_TYPES.TYPECODE_BDOUBLE
+                             --<>--
                              WHEN r_sql.description(i).col_type = 180
                              THEN DBMS_TYPES.TYPECODE_TIMESTAMP
                              --<>--
@@ -260,6 +263,12 @@ CREATE OR REPLACE TYPE BODY method4_ot AS
                   method4.r_sql.cursor, i, CAST(NULL AS BINARY_FLOAT)
                   );
             --<>--
+            WHEN DBMS_TYPES.TYPECODE_BDOUBLE
+            THEN
+               DBMS_SQL.DEFINE_COLUMN(
+                  method4.r_sql.cursor, i, CAST(NULL AS BINARY_DOUBLE)
+                  );
+            --<>--
             WHEN DBMS_TYPES.TYPECODE_DATE
             THEN
                DBMS_SQL.DEFINE_COLUMN(
@@ -337,20 +346,22 @@ CREATE OR REPLACE TYPE BODY method4_ot AS
                    ) RETURN NUMBER IS
 
       TYPE rt_fetch_attributes IS RECORD
-      ( v2_column    VARCHAR2(32767)
-      , num_column   NUMBER
-      , date_column  DATE
-      , clob_column  CLOB
-      , raw_column   RAW(32767)
-      , raw_error    NUMBER
-      , raw_length   INTEGER
-      , ids_column   INTERVAL DAY TO SECOND
-      , iym_column   INTERVAL YEAR TO MONTH
-      , ts_column    TIMESTAMP
-      , tstz_column  TIMESTAMP WITH TIME ZONE
-      , tsltz_column TIMESTAMP WITH LOCAL TIME ZONE
-      , cvl_offset   INTEGER := 0
-      , cvl_length   INTEGER
+      ( v2_column      VARCHAR2(32767)
+      , num_column     NUMBER
+      , bfloat_column  BINARY_FLOAT
+      , bdouble_column BINARY_DOUBLE
+      , date_column    DATE
+      , clob_column    CLOB
+      , raw_column     RAW(32767)
+      , raw_error      NUMBER
+      , raw_length     INTEGER
+      , ids_column     INTERVAL DAY TO SECOND
+      , iym_column     INTERVAL YEAR TO MONTH
+      , ts_column      TIMESTAMP(9)
+      , tstz_column    TIMESTAMP(9) WITH TIME ZONE
+      , tsltz_column   TIMESTAMP(9) WITH LOCAL TIME ZONE
+      , cvl_offset     INTEGER := 0
+      , cvl_length     INTEGER
       );
       r_fetch rt_fetch_attributes;
       r_meta  method4.rt_anytype_metadata;
@@ -416,6 +427,20 @@ CREATE OR REPLACE TYPE BODY method4_ot AS
                      method4.r_sql.cursor, i, r_fetch.num_column
                      );
                   rws.SetNumber( r_fetch.num_column );
+               --<>--
+               WHEN DBMS_TYPES.TYPECODE_BFLOAT
+               THEN
+                  DBMS_SQL.COLUMN_VALUE(
+                     method4.r_sql.cursor, i, r_fetch.bfloat_column
+                     );
+                  rws.SetBFloat( r_fetch.bfloat_column );
+               --<>--
+               WHEN DBMS_TYPES.TYPECODE_BDOUBLE
+               THEN
+                  DBMS_SQL.COLUMN_VALUE(
+                     method4.r_sql.cursor, i, r_fetch.bdouble_column
+                     );
+                  rws.SetBDouble( r_fetch.bdouble_column );
                --<>--
                WHEN DBMS_TYPES.TYPECODE_DATE
                THEN
