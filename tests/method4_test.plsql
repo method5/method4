@@ -312,11 +312,81 @@ begin
 		assert_equals('Timestamp with time zone 4.', '', actual4);
 	end;
 
+	--TIMESTAMP [(fractional_seconds_precision)] WITH LOCAL TIME ZONE
+	declare
+		actual1 timestamp(9) with local time zone;
+		actual2 timestamp(9) with local time zone;
+	begin
+		execute immediate
+		q'<
+			select *
+			from table(method4.run('
+				select
+					cast(timestamp ''2000-01-01 12:34:56.123456789 +01:00'' as timestamp(9) with local time zone),
+					cast(null as timestamp(9) with local time zone)
+				from dual'))
+		>'
+		into actual1, actual2;
+
+		assert_equals('Timestamp with local time zone 1.', '123456789', to_char(actual1, 'FF9'));
+		assert_equals('Timestamp with local time zone 2.', '', actual2);
+	end;
+
+	--INTERVAL YEAR [(year_precision)] TO MONTH
+	declare
+		actual1 interval year to month;
+		actual2 interval year to month;
+		actual3 interval year to month;
+		actual4 interval year to month;
+	begin
+		execute immediate
+		q'<
+			select *
+			from table(method4.run('
+				select
+					interval ''1-1'' year to month,
+					interval ''2'' year,
+					interval ''3'' month,
+					cast(null as interval year to month)
+				from dual'))
+		>'
+		into actual1, actual2, actual3, actual4;
+
+		assert_equals('Interval year to month 1.', '+01-01', actual1);
+		assert_equals('Interval year to month 2.', '+02-00', actual2);
+		assert_equals('Interval year to month 3.', '+00-03', actual3);
+		assert_equals('Interval year to month 4.', '', actual4);
+	end;
+
+	--INTERVAL DAY [(day_precision)] TO SECOND [(fractional_seconds_precision)]
+	declare
+		actual1 interval day to second;
+		actual2 interval day to second;
+		actual3 interval day to second;
+		actual4 interval day to second;
+	begin
+		execute immediate
+		q'<
+			select *
+			from table(method4.run('
+				select
+					interval ''4 4'' day to hour,
+					interval ''5:5'' minute to second,
+					interval ''6'' second,
+					cast(null as interval day to second)
+				from dual'))
+		>'
+		into actual1, actual2, actual3, actual4;
+
+		assert_equals('Interval day to second 1.', '+04 04:00:00.000000', actual1);
+		assert_equals('Interval day to second 2.', '+00 00:05:05.000000', actual2);
+		assert_equals('Interval day to second 3.', '+00 00:00:06.000000', actual3);
+		assert_equals('Interval day to second 4.', '', actual4);
+	end;
+
 
 /*
-TIMESTAMP [(fractional_seconds_precision)] WITH LOCAL TIME ZONE
-INTERVAL YEAR [(year_precision)] TO MONTH
-INTERVAL DAY [(day_precision)] TO SECOND [(fractional_seconds_precision)]
+TODO:
 RAW(size)
 LONG RAW
 ROWID
