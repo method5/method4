@@ -110,9 +110,47 @@ begin
 	end;
 
 	--Re-evaluation, only one query.
+	declare
+		actual1 number;
+	begin
+		execute immediate
+		q'<
+			select * from table(method4.run(
+			q'[
+				select 'select 1 a from dual' from dual
+			]', 'YES' ))
+		>' --'--Fix PL/SQL parser bug.
+		into actual1;
+
+		assert_equals('Re-evaluation 1.', '1', actual1);
+	end;
 
 	--Re-evaluation, multiple queries.
+	declare
+		actual_count sys.odcivarchar2list;
+		actual_name sys.odcivarchar2list;
+	begin
+		execute immediate
+		q'<
+			select * from table(method4.run(
+			q'[
+				select 'select count(*) total, '''||view_name||''' view_name from '||owner||'.'||view_name||''
+				from dba_views
+				where owner = 'SYS'
+					--3 views that I know only contain one row.
+					and view_name in ('V_$DATABASE', 'V_$INSTANCE', 'V_$TIMER')
+				order by view_name
+			]', 'YES'))
+		>' --'--Fix PL/SQL parser bug.
+		bulk collect into actual_count, actual_name;
 
+		assert_equals('Re-evaluation multiple queries 1.', '1', actual_count(1));
+		assert_equals('Re-evaluation multiple queries 2.', '1', actual_count(2));
+		assert_equals('Re-evaluation multiple queries 3.', '1', actual_count(3));
+		assert_equals('Re-evaluation multiple queries 4.', 'V_$DATABASE', actual_name(1));
+		assert_equals('Re-evaluation multiple queries 5.', 'V_$INSTANCE', actual_name(2));
+		assert_equals('Re-evaluation multiple queries 6.', 'V_$TIMER', actual_name(3));
+	end;
 
 	-------------------------------------------------------------------------------
 	--Listed in order of "Table 2-1 Built-in Data Type Summary" from SQL Language Reference.
