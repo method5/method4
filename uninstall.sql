@@ -8,6 +8,7 @@ prompt
 
 prompt Dropping type and package...
 drop package method4; 
+drop type method4_dynamic_ot;
 drop type method4_ot;
 
 prompt

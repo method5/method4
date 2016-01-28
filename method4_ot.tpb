@@ -1,66 +1,10 @@
 CREATE OR REPLACE TYPE BODY method4_ot AS
-
-	----------------------------------------------------------------------------
-	--Purpose: Create new SQL statement by concatenating result of original
-	--	statement with UNION ALLs.
-	--
-	--If you want to modify Method4, this is probably the spot to add your code.
-	--
-	--re_eval: "YES" to re-evaluate SQL statement to generate a new statement.
-	--	"NO" to use the original string as-is.
-	static function re_evaluate_statement(
-		stmt    in varchar2,
-		re_eval in varchar2
-	) return varchar2 is
-		v_new_stmt clob;
-		--pre-defind table of varchar2(4000).
-		sql_statements sys.ku$_vcnt;
-	begin
-		--Re-evaluate the sql as a group of select statements if the flag is set.
-		if trim(upper(re_eval)) = 'YES' then
-			--Use cached statement if available.
-			if method4.r_statement_cache.exists(stmt) then
-				v_new_stmt := method4.r_statement_cache(stmt);
-			--Else retrieve the statement.
-			else
-				--Get all the statements.
-				execute immediate stmt
-				bulk collect into sql_statements;
-
-				--Throw error if it returned no rows.
-				if sql_statements.count = 0 then
-					raise_application_error(-20000, 'The SQL statement did not generate any other SQL statements.');
-				end if;
-
-				--Convert them into a single large union-all statement.
-				for i in 1 .. sql_statements.count loop
-					if i = 1 then
-						v_new_stmt := sql_statements(i);
-					else
-						v_new_stmt := v_new_stmt || chr(10) || 'union all' || chr(10) || sql_statements(i);
-					end if;
-				end loop;
-
-				--Save it in the cache.
-				method4.r_statement_cache(stmt) := v_new_stmt;
-			end if;
-		--Do nothing to string if no re-evaluation.
-		elsif trim(upper(re_eval)) = 'NO' then
-			v_new_stmt := stmt;
-		--Else throw error that string is unexpected.
-		else
-			raise_application_error(-20000, 'The parameter RE_EVAL must be either YES or NO.');
-		end if;
-
-		return v_new_stmt;
-	end re_evaluate_statement;
-
+--See Method4 package specification for details.
 
    ----------------------------------------------------------------------------
    STATIC FUNCTION ODCITableDescribe(
                    rtype   OUT ANYTYPE,
-                   stmt    IN  VARCHAR2,
-                   re_eval IN  VARCHAR2 DEFAULT 'NO'
+                   stmt    IN  VARCHAR2
                    ) RETURN NUMBER IS
 
       r_sql   method4.rt_dynamic_sql;
@@ -72,7 +16,7 @@ CREATE OR REPLACE TYPE BODY method4_ot AS
       || Parse the SQL and describe its format and structure.
       */
       r_sql.cursor := DBMS_SQL.OPEN_CURSOR;
-      DBMS_SQL.PARSE( r_sql.cursor, RE_EVALUATE_STATEMENT(stmt, re_eval), DBMS_SQL.NATIVE );
+      DBMS_SQL.PARSE( r_sql.cursor, stmt, DBMS_SQL.NATIVE );
       DBMS_SQL.DESCRIBE_COLUMNS2( r_sql.cursor, r_sql.column_cnt, r_sql.description );
       DBMS_SQL.CLOSE_CURSOR( r_sql.cursor );
 
@@ -170,8 +114,7 @@ CREATE OR REPLACE TYPE BODY method4_ot AS
    STATIC FUNCTION ODCITablePrepare(
                    sctx    OUT method4_ot,
                    tf_info IN  sys.ODCITabFuncInfo,
-                   stmt    IN  VARCHAR2,
-                   re_eval IN  VARCHAR2 DEFAULT 'NO'
+                   stmt    IN  VARCHAR2
                    ) RETURN NUMBER IS
 
       r_meta method4.rt_anytype_metadata;
@@ -200,8 +143,7 @@ CREATE OR REPLACE TYPE BODY method4_ot AS
    ----------------------------------------------------------------------------
    STATIC FUNCTION ODCITableStart(
                    sctx IN OUT method4_ot,
-                   stmt IN     VARCHAR2,
-                   re_eval IN  VARCHAR2 DEFAULT 'NO'
+                   stmt IN     VARCHAR2
                    ) RETURN NUMBER IS
 
       r_meta method4.rt_anytype_metadata;
@@ -213,7 +155,7 @@ CREATE OR REPLACE TYPE BODY method4_ot AS
       || ANYTYPE structure to define and execute the SQL statement...
       */
       method4.r_sql.cursor := DBMS_SQL.OPEN_CURSOR;
-      DBMS_SQL.PARSE( method4.r_sql.cursor, RE_EVALUATE_STATEMENT(stmt, re_eval), DBMS_SQL.NATIVE );
+      DBMS_SQL.PARSE( method4.r_sql.cursor, stmt, DBMS_SQL.NATIVE );
       DBMS_SQL.DESCRIBE_COLUMNS2( method4.r_sql.cursor,
                                   method4.r_sql.column_cnt,
                                   method4.r_sql.description );

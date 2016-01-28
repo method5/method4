@@ -58,36 +58,18 @@ begin
 		execute immediate
 		q'<
 			select *
-			from table(method4.run('select * from dual'))
+			from table(method4.query('select * from dual'))
 		>'
 		into actual;
 
 		assert_equals('Simple.', 'X', actual);
 	end;
 
-	--Calling with second parameter other than YES or NO raises an exception.
-	declare
-		actual varchar2(1);
-		bad_parmaeter exception;
-		pragma exception_init(bad_parmaeter, -20000);
-	begin
-		execute immediate
-		q'<
-			select *
-			from table(method4.run('select * from dual', 'FALSE'))
-		>'
-		into actual;
-
-		assert_equals('Exception for bad parameter.', 'Exception', 'No exception');
-	exception when bad_parmaeter then
-		assert_equals('Exception for bad parameter.', 'Exception', 'Exception');
-	end;
-
 	--DBA objects.
 	declare
 		actual number;
 	begin
-		execute immediate q'<select * from table(method4.run('select count(*) from dba_users where rownum = 1'))>'
+		execute immediate q'<select * from table(method4.query('select count(*) from dba_users where rownum = 1'))>'
 		into actual;
 		assert_equals('DBA objects.', '1', actual);
 	end;
@@ -96,7 +78,7 @@ begin
 	declare
 		actual number;
 	begin
-		execute immediate q'<select * from table(method4.run('select count(*)+0+0+0+0+0+0+0+0+0+0+0 from dba_users where rownum = 1'))>'
+		execute immediate q'<select * from table(method4.query('select count(*)+0+0+0+0+0+0+0+0+0+0+0 from dba_users where rownum = 1'))>'
 		into actual;
 		assert_equals('Long, default column name with 30 bytes.', '1', actual);
 	end;
@@ -104,7 +86,7 @@ begin
 	declare
 		actual number;
 	begin
-		execute immediate q'<select * from table(method4.run('select count(*)+0+0+0+0+0+0+0+0+0+0+0+0+0+0+0+0+0+0+0+0+0+0 from dba_users where rownum = 1'))>'
+		execute immediate q'<select * from table(method4.query('select count(*)+0+0+0+0+0+0+0+0+0+0+0+0+0+0+0+0+0+0+0+0+0+0 from dba_users where rownum = 1'))>'
 		into actual;
 		assert_equals('Long, default column name with > 30 bytes.', '1', actual);
 	end;
@@ -115,10 +97,10 @@ begin
 	begin
 		execute immediate
 		q'<
-			select * from table(method4.run(
+			select * from table(method4.dynamic_query(
 			q'[
 				select 'select 1 a from dual' from dual
-			]', 'YES' ))
+			]'))
 		>' --'--Fix PL/SQL parser bug.
 		into actual1;
 
@@ -132,7 +114,7 @@ begin
 	begin
 		execute immediate
 		q'<
-			select * from table(method4.run(
+			select * from table(method4.dynamic_query(
 			q'[
 				select 'select count(*) total, '''||view_name||''' view_name from '||owner||'.'||view_name||''
 				from dba_views
@@ -140,7 +122,7 @@ begin
 					--3 views that I know only contain one row.
 					and view_name in ('V_$DATABASE', 'V_$INSTANCE', 'V_$TIMER')
 				order by view_name
-			]', 'YES'))
+			]'))
 		>' --'--Fix PL/SQL parser bug.
 		bulk collect into actual_count, actual_name;
 
@@ -165,7 +147,7 @@ begin
 		execute immediate
 		q'<
 			select *
-			from table(method4.run('select ''A'', cast(''B'' as varchar2(1)), lpad(''C'', 4000, ''C'') from dual'))
+			from table(method4.query('select ''A'', cast(''B'' as varchar2(1)), lpad(''C'', 4000, ''C'') from dual'))
 		>'
 		into actual1, actual2, actual3;
 
@@ -183,7 +165,7 @@ begin
 		execute immediate
 		q'<
 			select *
-			from table(method4.run('select n''A'', cast(''B'' as nvarchar2(1)), lpad(n''C'', 1000, n''C'') from dual'))
+			from table(method4.query('select n''A'', cast(''B'' as nvarchar2(1)), lpad(n''C'', 1000, n''C'') from dual'))
 		>'
 		into actual1, actual2, actual3;
 
@@ -201,7 +183,7 @@ begin
 		execute immediate
 		q'<
 			select *
-			from table(method4.run('select 1.1, cast(2.2 as number(10, 1)), 3 from dual'))
+			from table(method4.query('select 1.1, cast(2.2 as number(10, 1)), 3 from dual'))
 		>'
 		into actual1, actual2, actual3;
 
@@ -219,7 +201,7 @@ begin
 		execute immediate
 		q'<
 			select *
-			from table(method4.run('select cast(100.001 as float), cast(20.02 as float(100)), cast(3 as float(1)) from dual'))
+			from table(method4.query('select cast(100.001 as float), cast(20.02 as float(100)), cast(3 as float(1)) from dual'))
 		>'
 		into actual1, actual2, actual3;
 
@@ -236,7 +218,7 @@ begin
 		execute immediate
 		q'<
 			select *
-			from table(method4.run('select text from dba_views where view_name = ''DBA_EXP_VERSION'''))
+			from table(method4.query('select text from dba_views where view_name = ''DBA_EXP_VERSION'''))
 		>'
 		into actual1;
 
@@ -253,7 +235,7 @@ begin
 		execute immediate
 		q'<
 			select *
-			from table(method4.run('select date ''2000-01-01'', to_date(''2000-01-02'', ''YYYY-MM-DD''), sysdate from dual'))
+			from table(method4.query('select date ''2000-01-01'', to_date(''2000-01-02'', ''YYYY-MM-DD''), sysdate from dual'))
 		>'
 		into actual1, actual2, actual3;
 
@@ -270,7 +252,7 @@ begin
 		execute immediate
 		q'<
 			select *
-			from table(method4.run('select 1.1f, cast(2.2 as binary_float) from dual'))
+			from table(method4.query('select 1.1f, cast(2.2 as binary_float) from dual'))
 		>'
 		into actual1, actual2;
 
@@ -286,7 +268,7 @@ begin
 		execute immediate
 		q'<
 			select *
-			from table(method4.run('select 1.1d, cast(2.2 as binary_double) from dual'))
+			from table(method4.query('select 1.1d, cast(2.2 as binary_double) from dual'))
 		>'
 		into actual1, actual2;
 
@@ -306,7 +288,7 @@ begin
 		execute immediate
 		q'<
 			select *
-			from table(method4.run('
+			from table(method4.query('
 				select
 					timestamp ''2000-01-01 12:34:56'',
 					to_timestamp(''2000-01-02 12:34:56'', ''YYYY-MM-DD HH24:MI:SS''),
@@ -334,7 +316,7 @@ begin
 		execute immediate
 		q'<
 			select *
-			from table(method4.run('
+			from table(method4.query('
 				select
 					timestamp ''2000-01-01 12:34:56 +01:00'',
 					timestamp ''2000-01-02 12:34:56 US/Eastern'',
@@ -358,7 +340,7 @@ begin
 		execute immediate
 		q'<
 			select *
-			from table(method4.run('
+			from table(method4.query('
 				select
 					cast(timestamp ''2000-01-01 12:34:56.123456789 +01:00'' as timestamp(9) with local time zone),
 					cast(null as timestamp(9) with local time zone)
@@ -380,7 +362,7 @@ begin
 		execute immediate
 		q'<
 			select *
-			from table(method4.run('
+			from table(method4.query('
 				select
 					interval ''1-1'' year to month,
 					interval ''2'' year,
@@ -406,7 +388,7 @@ begin
 		execute immediate
 		q'<
 			select *
-			from table(method4.run('
+			from table(method4.query('
 				select
 					interval ''4 4'' day to hour,
 					interval ''5:5'' minute to second,
