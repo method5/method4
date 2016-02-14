@@ -1,6 +1,6 @@
 CREATE OR REPLACE PACKAGE method4 AS
 
-   C_VERSION constant varchar2(10) := '2.0.0';
+   C_VERSION constant varchar2(10) := '2.0.1';
 
    /*
    || ---------------------------------------------------------------------------------
@@ -74,7 +74,7 @@ CREATE OR REPLACE PACKAGE method4 AS
             ) RETURN ANYDATASET PIPELINED USING method4_dynamic_ot;
 
    /*
-   || Record types for use across multiple DLA_OT methods.
+   || Record types for use across multiple METHOD4_OT methods.
    */
    TYPE rt_dynamic_sql IS RECORD
    ( cursor      INTEGER
@@ -102,7 +102,7 @@ CREATE OR REPLACE PACKAGE method4 AS
    );
 
    /*
-   || State variable for use across multiple DLA_OT methods.
+   || State variable for use across multiple METHOD4_OT methods.
    */
    r_sql rt_dynamic_sql;
 
