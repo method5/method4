@@ -7,8 +7,6 @@ CREATE OR REPLACE TYPE BODY method4_dynamic_ot AS
 	--
 	--If you want to modify Method4, this is probably the spot to add your code.
 	--
-	--re_eval: "YES" to re-evaluate SQL statement to generate a new statement.
-	--	"NO" to use the original string as-is.
 	static function re_evaluate_statement(
 		stmt    in varchar2
 	) return varchar2 is
