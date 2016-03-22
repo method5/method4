@@ -49,7 +49,7 @@ end assert_equals;
 
 
 --------------------------------------------------------------------------------
-procedure test_convert_to_text is
+procedure test_simple is
 begin
 	--Simple.
 	declare
@@ -91,49 +91,12 @@ begin
 		assert_equals('Long, default column name with > 30 bytes.', '1', actual);
 	end;
 
-	--Re-evaluation, only one query.
-	declare
-		actual1 number;
-	begin
-		execute immediate
-		q'<
-			select * from table(method4.dynamic_query(
-			q'[
-				select 'select 1 a from dual' from dual
-			]'))
-		>' --'--Fix PL/SQL parser bug.
-		into actual1;
+end test_simple;
 
-		assert_equals('Re-evaluation 1.', '1', actual1);
-	end;
 
-	--Re-evaluation, multiple queries.
-	declare
-		actual_count sys.odcivarchar2list;
-		actual_name sys.odcivarchar2list;
-	begin
-		execute immediate
-		q'<
-			select * from table(method4.dynamic_query(
-			q'[
-				select 'select count(*) total, '''||view_name||''' view_name from '||owner||'.'||view_name||''
-				from dba_views
-				where owner = 'SYS'
-					--3 views that I know only contain one row.
-					and view_name in ('V_$DATABASE', 'V_$INSTANCE', 'V_$TIMER')
-				order by view_name
-			]'))
-		>' --'--Fix PL/SQL parser bug.
-		bulk collect into actual_count, actual_name;
-
-		assert_equals('Re-evaluation multiple queries 1.', '1', actual_count(1));
-		assert_equals('Re-evaluation multiple queries 2.', '1', actual_count(2));
-		assert_equals('Re-evaluation multiple queries 3.', '1', actual_count(3));
-		assert_equals('Re-evaluation multiple queries 4.', 'V_$DATABASE', actual_name(1));
-		assert_equals('Re-evaluation multiple queries 5.', 'V_$INSTANCE', actual_name(2));
-		assert_equals('Re-evaluation multiple queries 6.', 'V_$TIMER', actual_name(3));
-	end;
-
+--------------------------------------------------------------------------------
+procedure test_types is
+begin
 	-------------------------------------------------------------------------------
 	--Listed in order of "Table 2-1 Built-in Data Type Summary" from SQL Language Reference.
 	-------------------------------------------------------------------------------
@@ -424,8 +387,108 @@ NESTED TABLE
 XMLType
 ANYDATA
 */
+end test_types;
 
-end test_convert_to_text;
+
+--------------------------------------------------------------------------------
+procedure test_dynamic_query is
+begin
+	--Dynamic, only one query.
+	declare
+		actual1 number;
+	begin
+		execute immediate
+		q'<
+			select * from table(method4.dynamic_query(
+			q'[
+				select 'select 1 a from dual' from dual
+			]'))
+		>' --'--Fix PL/SQL parser bug.
+		into actual1;
+
+		assert_equals('Dynamic query 1.', '1', actual1);
+	end;
+
+	--Dynamic, multiple queries.
+	declare
+		actual_count sys.odcivarchar2list;
+		actual_name sys.odcivarchar2list;
+	begin
+		execute immediate
+		q'<
+			select * from table(method4.dynamic_query(
+			q'[
+				select 'select count(*) total, '''||view_name||''' view_name from '||owner||'.'||view_name||''
+				from dba_views
+				where owner = 'SYS'
+					--3 views that I know only contain one row.
+					and view_name in ('V_$DATABASE', 'V_$INSTANCE', 'V_$TIMER')
+				order by view_name
+			]'))
+		>' --'--Fix PL/SQL parser bug.
+		bulk collect into actual_count, actual_name;
+
+		assert_equals('Dynamic query multiple queries 1.', '1', actual_count(1));
+		assert_equals('Dynamic query multiple queries 2.', '1', actual_count(2));
+		assert_equals('Dynamic query multiple queries 3.', '1', actual_count(3));
+		assert_equals('Dynamic query multiple queries 4.', 'V_$DATABASE', actual_name(1));
+		assert_equals('Dynamic query multiple queries 5.', 'V_$INSTANCE', actual_name(2));
+		assert_equals('Dynamic query multiple queries 6.', 'V_$TIMER', actual_name(3));
+	end;
+
+end test_dynamic_query;
+
+
+--------------------------------------------------------------------------------
+procedure test_poll_table is
+	v_table_or_view_does_not_exist exception;
+	pragma exception_init(v_table_or_view_does_not_exist, -00942);
+
+	--Create objects used for testing.
+	procedure setup is
+	begin
+		execute immediate 'create table m4_temp_test_table1(a number) rowdependencies';
+		execute immediate 'insert into m4_temp_test_table1 values(1)';
+		commit;
+	end;
+
+	--Remove objects used for testing.
+	procedure tear_down is
+	begin
+		begin
+			execute immediate 'drop table m4_temp_test_table1 purge';
+		exception when v_table_or_view_does_not_exist then null;
+		end;
+	end;
+begin
+	--Remove any leftover objects and create new ones.
+	tear_down;
+	setup;
+
+	--Dynamic, only one query.
+	declare
+		actual1 number;
+	begin
+		--Setup
+
+		execute immediate
+		q'<
+			select * from table(method4.poll_table(
+			   p_table_name              => 'm4_temp_test_table1',
+			   p_sql_statement_condition => 'select 1 from dual',
+			   p_refresh_seconds         => 2
+			))
+		>'
+		into actual1;
+
+		assert_equals('Poll table 1.', '1', actual1);
+	end;
+
+	--TODO - more tests.
+
+	--Cleanup.
+	tear_down;
+end test_poll_table;
 
 
 --------------------------------------------------------------------------------
@@ -443,7 +506,10 @@ begin
 	dbms_output.put_line('----------------------------------------');
 
 	--Run the tests.
-	test_convert_to_text;
+	test_simple;
+	test_types;
+	test_dynamic_query;
+	test_poll_table;
 
 	--Print summary of results.
 	dbms_output.put_line(null);

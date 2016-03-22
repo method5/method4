@@ -45,6 +45,9 @@ CREATE OR REPLACE TYPE BODY method4_ot AS
                              WHEN r_sql.description(i).col_type IN (8,112)
                              THEN DBMS_TYPES.TYPECODE_CLOB
                              --<>--
+                             WHEN r_sql.description(i).col_type = 113
+                             THEN DBMS_TYPES.TYPECODE_BLOB
+                             --<>--
                              WHEN r_sql.description(i).col_type = 12
                              THEN DBMS_TYPES.TYPECODE_DATE
                              --<>--
@@ -211,6 +214,12 @@ CREATE OR REPLACE TYPE BODY method4_ot AS
                   method4.r_sql.cursor, i, CAST(NULL AS BINARY_DOUBLE)
                   );
             --<>--
+            WHEN DBMS_TYPES.TYPECODE_BLOB
+            THEN
+               DBMS_SQL.DEFINE_COLUMN(
+                  method4.r_sql.cursor, i, CAST(NULL AS BLOB)
+                  );
+            --<>--
             WHEN DBMS_TYPES.TYPECODE_DATE
             THEN
                DBMS_SQL.DEFINE_COLUMN(
@@ -294,6 +303,7 @@ CREATE OR REPLACE TYPE BODY method4_ot AS
       , bdouble_column BINARY_DOUBLE
       , date_column    DATE
       , clob_column    CLOB
+      , blob_column    BLOB
       , raw_column     RAW(32767)
       , raw_error      NUMBER
       , raw_length     INTEGER
@@ -383,6 +393,13 @@ CREATE OR REPLACE TYPE BODY method4_ot AS
                      method4.r_sql.cursor, i, r_fetch.bdouble_column
                      );
                   rws.SetBDouble( r_fetch.bdouble_column );
+               --<>--
+               WHEN DBMS_TYPES.TYPECODE_BLOB
+               THEN
+                  DBMS_SQL.COLUMN_VALUE(
+                     method4.r_sql.cursor, i, r_fetch.blob_column
+                     );
+                  rws.SetBlob( r_fetch.blob_column );
                --<>--
                WHEN DBMS_TYPES.TYPECODE_DATE
                THEN
