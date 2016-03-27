@@ -63,7 +63,7 @@ Method4 is a simpler, more generic version of that application.  It can be usefu
 
 Use this program with caution.  Few programs need to be this dynamic.  This package will be slower and buggier than regular SQL.
 
-## 4.0 License
+## License
 
 This project uses the MIT License.
 
