@@ -63,6 +63,10 @@ Method4 is a simpler, more generic version of that application.  It can be usefu
 
 Use this program with caution.  Few programs need to be this dynamic.  This package will be slower and buggier than regular SQL.
 
+## 4.0 License
+
+This project uses the MIT License.
+
 ## Installation
 
 Click the "Download ZIP" button, extract the files, CD to the directory with those files, connect to SQL*Plus, and run these commands:

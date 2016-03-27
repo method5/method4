@@ -92,8 +92,10 @@ CREATE OR REPLACE PACKAGE method4 AS
    ||              Objects like 'M4_TEMP_%' can be dropped after the query is done.
    ||
    ||
-   ||              ------------------------------------------------------
-   ||              (c) Adrian Billington, www.oracle-developer.net.
+   || License:     MIT License
+   ||              Original work Copyright (c) 2007 Adrian Billington, www.oracle-developer.net
+   ||              Modified work Copyright 2016 Jon Heller
+   ||
    ||
    || ---------------------------------------------------------------------------------
    */
