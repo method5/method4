@@ -1,7 +1,9 @@
-CREATE OR REPLACE TYPE method4_dynamic_ot UNDER method4_ot
+CREATE OR REPLACE TYPE method4_dynamic_ot AUTHID CURRENT_USER AS OBJECT
 --See Method4 package specification for details.
 (
-  STATIC FUNCTION Re_Evaluate_Statement(
+  atype ANYTYPE --<-- transient record type
+
+, STATIC FUNCTION Re_Evaluate_Statement(
                   stmt    IN VARCHAR2
                   ) RETURN VARCHAR2
 
@@ -19,6 +21,16 @@ CREATE OR REPLACE TYPE method4_dynamic_ot UNDER method4_ot
 , STATIC FUNCTION ODCITableStart(
                   sctx    IN OUT method4_dynamic_ot,
                   stmt    IN     VARCHAR2
+                  ) RETURN NUMBER
+
+, MEMBER FUNCTION ODCITableFetch(
+                  SELF  IN OUT method4_dynamic_ot,
+                  nrows IN     NUMBER,
+                  rws   OUT    anydataset
+                  ) RETURN NUMBER
+
+, MEMBER FUNCTION ODCITableClose(
+                  SELF IN method4_dynamic_ot
                   ) RETURN NUMBER
 
 ) NOT FINAL INSTANTIABLE;
