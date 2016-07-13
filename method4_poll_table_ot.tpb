@@ -73,7 +73,8 @@ begin
 		exit when v_condition = 1;
 
 		--Wait N seconds.
-		dbms_lock.sleep(#SECONDS_TO_WAIT);
+		--Use execute immediate to simplify privilege requirements.
+		execute immediate 'begin dbms_lock.sleep(#SECONDS_TO_WAIT); end;';
 	end loop;
 end;
 ]';
