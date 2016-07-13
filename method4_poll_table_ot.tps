@@ -1,7 +1,9 @@
-CREATE OR REPLACE TYPE method4_poll_table_ot UNDER method4_ot
+CREATE OR REPLACE TYPE method4_poll_table_ot AUTHID CURRENT_USER AS OBJECT
 --See Method4 package specification for details.
 (
-  STATIC FUNCTION ODCITableDescribe(
+  atype ANYTYPE --<-- transient record type
+
+, STATIC FUNCTION ODCITableDescribe(
                   rtype                     OUT ANYTYPE,
                   p_table_name              IN VARCHAR2,
                   p_sql_statement_condition IN VARCHAR2,
@@ -23,7 +25,13 @@ CREATE OR REPLACE TYPE method4_poll_table_ot UNDER method4_ot
                   p_refresh_seconds         IN NUMBER DEFAULT 3
                   ) RETURN NUMBER
 
-, OVERRIDING MEMBER FUNCTION ODCITableClose(
+, MEMBER FUNCTION ODCITableFetch(
+                  SELF  IN OUT method4_poll_table_ot,
+                  nrows IN     NUMBER,
+                  rws   OUT    anydataset
+                  ) RETURN NUMBER
+
+, MEMBER FUNCTION ODCITableClose(
                   SELF IN method4_poll_table_ot
                   ) RETURN NUMBER
 

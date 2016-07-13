@@ -1,5 +1,7 @@
 CREATE OR REPLACE TYPE BODY method4_poll_table_ot AS
 --See Method4 package specification for details.
+--Many methods in this type are almost identical to those in METHOD4_OT.
+--Inheritence could simplify the code but causes unsolvable OCI errors in 11g.
 
 --------------------------------------------------------------------------------
 static function ODCITableDescribe(
@@ -197,24 +199,36 @@ begin
 	return method4_ot.odcitabledescribe(rtype, 'select * from table(M4_TEMP_FUNCTION_'||sys_context('method4_context', 'temp_object_id')||')');
 end ODCITableDescribe;
 
-
    ----------------------------------------------------------------------------
    STATIC FUNCTION ODCITablePrepare(
-                   sctx                      OUT method4_poll_table_ot,
-                   tf_info                   IN  sys.ODCITabFuncInfo,
+                   sctx    OUT method4_poll_table_ot,
+                   tf_info IN  sys.ODCITabFuncInfo,
                    p_table_name              IN VARCHAR2,
                    p_sql_statement_condition IN VARCHAR2,
                    p_refresh_seconds         IN NUMBER DEFAULT 3
                    ) RETURN NUMBER IS
 
-      super_sctx method4_ot;
-      status     number;
+      r_meta method4.rt_anytype_metadata;
 
   BEGIN
-      super_sctx := sctx;
-      status := method4_ot.ODCITablePrepare(super_sctx, tf_info, 'select * from table(M4_TEMP_FUNCTION_'||sys_context('method4_context', 'temp_object_id')||')');
-      sctx := method4_poll_table_ot(super_sctx.atype);
-      return odciconst.success;
+
+      /*
+      || We prepare the dataset that our pipelined function will return by
+      || describing the ANYTYPE that contains the transient record structure...
+      */
+      r_meta.typecode := tf_info.rettype.GetAttrElemInfo(
+                            1, r_meta.precision, r_meta.scale, r_meta.length,
+                            r_meta.csid, r_meta.csfrm, r_meta.type, r_meta.name
+                            );
+
+      /*
+      || Using this, we initialise the scan context for use in this and
+      || subsequent executions of the same dynamic SQL cursor...
+      */
+      sctx := method4_poll_table_ot(r_meta.type);
+
+      RETURN ODCIConst.Success;
+
    END;
 
    ----------------------------------------------------------------------------
@@ -227,6 +241,8 @@ end ODCITableDescribe;
 
       type string_table is table of varchar2(32767);
       v_sql_ids string_table;
+      r_meta method4.rt_anytype_metadata;
+      v_new_stmt VARCHAR2(32767);
 
   BEGIN
       --Find SQL_IDs of the SQL statements used to call Method4.
@@ -244,11 +260,345 @@ end ODCITableDescribe;
             EXECUTE IMMEDIATE v_sql_ids(i);
       END LOOP;
 
-      RETURN method4_ot.ODCITableStart(sctx, 'select * from table(M4_TEMP_FUNCTION_'||sys_context('method4_context', 'temp_object_id')||')');
+      v_new_stmt := 'select * from table(M4_TEMP_FUNCTION_'||sys_context('method4_context', 'temp_object_id')||')';
+
+      /*
+      || We now describe the cursor again and use this and the described
+      || ANYTYPE structure to define and execute the SQL statement...
+      */
+      method4.r_sql.cursor := DBMS_SQL.OPEN_CURSOR;
+      DBMS_SQL.PARSE( method4.r_sql.cursor, v_new_stmt, DBMS_SQL.NATIVE );
+      DBMS_SQL.DESCRIBE_COLUMNS2( method4.r_sql.cursor,
+                                  method4.r_sql.column_cnt,
+                                  method4.r_sql.description );
+
+      --Remove statement from the cache.
+      method4.r_statement_cache.delete(v_new_stmt);
+
+      FOR i IN 1 .. method4.r_sql.column_cnt LOOP
+
+         /*
+         || Get the ANYTYPE attribute at this position...
+         */
+         r_meta.typecode := sctx.atype.GetAttrElemInfo(
+                               i, r_meta.precision, r_meta.scale, r_meta.length,
+                               r_meta.csid, r_meta.csfrm, r_meta.type, r_meta.name
+                               );
+
+         CASE r_meta.typecode
+            --<>--
+            WHEN DBMS_TYPES.TYPECODE_VARCHAR2
+            THEN
+               DBMS_SQL.DEFINE_COLUMN(
+                  method4.r_sql.cursor, i, '', 32767
+                  );
+            --<>--
+            WHEN DBMS_TYPES.TYPECODE_NVARCHAR2
+            THEN
+               DBMS_SQL.DEFINE_COLUMN(
+                  method4.r_sql.cursor, i, '', 32767
+                  );
+            --<>--
+            WHEN DBMS_TYPES.TYPECODE_NUMBER
+            THEN
+               DBMS_SQL.DEFINE_COLUMN(
+                  method4.r_sql.cursor, i, CAST(NULL AS NUMBER)
+                  );
+            --<FLOAT - convert to NUMBER.>--
+            WHEN 4
+            THEN
+               DBMS_SQL.DEFINE_COLUMN(
+                  method4.r_sql.cursor, i, CAST(NULL AS NUMBER)
+                  );
+            --<>--
+            WHEN DBMS_TYPES.TYPECODE_BFLOAT
+            THEN
+               DBMS_SQL.DEFINE_COLUMN(
+                  method4.r_sql.cursor, i, CAST(NULL AS BINARY_FLOAT)
+                  );
+            --<>--
+            WHEN DBMS_TYPES.TYPECODE_BDOUBLE
+            THEN
+               DBMS_SQL.DEFINE_COLUMN(
+                  method4.r_sql.cursor, i, CAST(NULL AS BINARY_DOUBLE)
+                  );
+            --<>--
+            WHEN DBMS_TYPES.TYPECODE_BLOB
+            THEN
+               DBMS_SQL.DEFINE_COLUMN(
+                  method4.r_sql.cursor, i, CAST(NULL AS BLOB)
+                  );
+            --<>--
+            WHEN DBMS_TYPES.TYPECODE_DATE
+            THEN
+               DBMS_SQL.DEFINE_COLUMN(
+                  method4.r_sql.cursor, i, CAST(NULL AS DATE)
+                  );
+            --<>--
+            WHEN DBMS_TYPES.TYPECODE_RAW
+            THEN
+               DBMS_SQL.DEFINE_COLUMN_RAW(
+                  method4.r_sql.cursor, i, CAST(NULL AS RAW), r_meta.length
+                  );
+            --<>--
+            WHEN DBMS_TYPES.TYPECODE_TIMESTAMP
+            THEN
+               DBMS_SQL.DEFINE_COLUMN(
+                  method4.r_sql.cursor, i, CAST(NULL AS TIMESTAMP)
+                  );
+            --<>--
+            WHEN DBMS_TYPES.TYPECODE_TIMESTAMP_TZ
+            THEN
+               DBMS_SQL.DEFINE_COLUMN(
+                  method4.r_sql.cursor, i, CAST(NULL AS TIMESTAMP WITH TIME ZONE)
+                  );
+            --<>--
+            WHEN DBMS_TYPES.TYPECODE_TIMESTAMP_LTZ
+            THEN
+               DBMS_SQL.DEFINE_COLUMN(
+                  method4.r_sql.cursor, i, CAST(NULL AS TIMESTAMP WITH LOCAL TIME ZONE)
+                  );
+            --<>--
+            WHEN DBMS_TYPES.TYPECODE_INTERVAL_YM
+            THEN
+               DBMS_SQL.DEFINE_COLUMN(
+                  method4.r_sql.cursor, i, CAST(NULL AS INTERVAL YEAR TO MONTH)
+                  );
+            --<>--
+            WHEN DBMS_TYPES.TYPECODE_INTERVAL_DS
+            THEN
+               DBMS_SQL.DEFINE_COLUMN(
+                  method4.r_sql.cursor, i, CAST(NULL AS INTERVAL DAY TO SECOND)
+                  );
+            --<>--
+            WHEN DBMS_TYPES.TYPECODE_CLOB
+            THEN
+               --<>--
+               CASE method4.r_sql.description(i).col_type
+                  WHEN 8
+                  THEN
+                     DBMS_SQL.DEFINE_COLUMN_LONG(
+                        method4.r_sql.cursor, i
+                        );
+                  ELSE
+                     DBMS_SQL.DEFINE_COLUMN(
+                        method4.r_sql.cursor, i, CAST(NULL AS CLOB)
+                        );
+               END CASE;
+         END CASE;
+      END LOOP;
+
+      /*
+      || The cursor is prepared according to the structure of the type we wish
+      || to fetch it into. We can now execute it and we are done for this method...
+      */
+      method4.r_sql.execute := DBMS_SQL.EXECUTE( method4.r_sql.cursor );
+
+      RETURN ODCIConst.Success;
+
    END;
 
    ----------------------------------------------------------------------------
-   OVERRIDING MEMBER FUNCTION ODCITableClose(
+   MEMBER FUNCTION ODCITableFetch(
+                   SELF   IN OUT method4_poll_table_ot,
+                   nrows  IN     NUMBER,
+                   rws    OUT    ANYDATASET
+                   ) RETURN NUMBER IS
+
+      TYPE rt_fetch_attributes IS RECORD
+      ( v2_column      VARCHAR2(32767)
+      , num_column     NUMBER
+      , bfloat_column  BINARY_FLOAT
+      , bdouble_column BINARY_DOUBLE
+      , date_column    DATE
+      , clob_column    CLOB
+      , blob_column    BLOB
+      , raw_column     RAW(32767)
+      , raw_error      NUMBER
+      , raw_length     INTEGER
+      , ids_column     INTERVAL DAY TO SECOND
+      , iym_column     INTERVAL YEAR TO MONTH
+      , ts_column      TIMESTAMP(9)
+      , tstz_column    TIMESTAMP(9) WITH TIME ZONE
+      , tsltz_column   TIMESTAMP(9) WITH LOCAL TIME ZONE
+      , cvl_offset     INTEGER := 0
+      , cvl_length     INTEGER
+      );
+      r_fetch rt_fetch_attributes;
+      r_meta  method4.rt_anytype_metadata;
+
+
+   BEGIN
+
+      IF DBMS_SQL.FETCH_ROWS( method4.r_sql.cursor ) > 0 THEN
+
+         /*
+         || First we describe our current ANYTYPE instance (SELF.A) to determine
+         || the number and types of the attributes...
+         */
+         r_meta.typecode := SELF.atype.GetInfo(
+                               r_meta.precision, r_meta.scale, r_meta.length,
+                               r_meta.csid, r_meta.csfrm, r_meta.schema,
+                               r_meta.name, r_meta.version, r_meta.attr_cnt
+                               );
+
+         /*
+         || We can now begin to piece together our returning dataset. We create an
+         || instance of ANYDATASET and then fetch the attributes off the DBMS_SQL
+         || cursor using the metadata from the ANYTYPE. LONGs are converted to CLOBs...
+         */
+         ANYDATASET.BeginCreate( DBMS_TYPES.TYPECODE_OBJECT, SELF.atype, rws );
+         rws.AddInstance();
+         rws.PieceWise();
+
+         FOR i IN 1 .. method4.r_sql.column_cnt LOOP
+
+            r_meta.typecode := SELF.atype.GetAttrElemInfo(
+                                  i, r_meta.precision, r_meta.scale, r_meta.length,
+                                  r_meta.csid, r_meta.csfrm, r_meta.attr_type,
+                                  r_meta.attr_name
+                                  );
+
+            CASE r_meta.typecode
+               --<>--
+               WHEN DBMS_TYPES.TYPECODE_VARCHAR2
+               THEN
+                  DBMS_SQL.COLUMN_VALUE(
+                     method4.r_sql.cursor, i, r_fetch.v2_column
+                     );
+                  rws.SetVarchar2( r_fetch.v2_column );
+               --<>--
+               WHEN DBMS_TYPES.TYPECODE_NVARCHAR2
+               THEN
+                  DBMS_SQL.COLUMN_VALUE(
+                     method4.r_sql.cursor, i, r_fetch.v2_column
+                     );
+                  rws.SetNVarchar2( r_fetch.v2_column );
+               --<>--
+               WHEN DBMS_TYPES.TYPECODE_NUMBER
+               THEN
+                  DBMS_SQL.COLUMN_VALUE(
+                     method4.r_sql.cursor, i, r_fetch.num_column
+                     );
+                  rws.SetNumber( r_fetch.num_column );
+               --<FLOAT - convert to NUMBER.>--
+               WHEN 4
+               THEN
+                  DBMS_SQL.COLUMN_VALUE(
+                     method4.r_sql.cursor, i, r_fetch.num_column
+                     );
+                  rws.SetNumber( r_fetch.num_column );
+               --<>--
+               WHEN DBMS_TYPES.TYPECODE_BFLOAT
+               THEN
+                  DBMS_SQL.COLUMN_VALUE(
+                     method4.r_sql.cursor, i, r_fetch.bfloat_column
+                     );
+                  rws.SetBFloat( r_fetch.bfloat_column );
+               --<>--
+               WHEN DBMS_TYPES.TYPECODE_BDOUBLE
+               THEN
+                  DBMS_SQL.COLUMN_VALUE(
+                     method4.r_sql.cursor, i, r_fetch.bdouble_column
+                     );
+                  rws.SetBDouble( r_fetch.bdouble_column );
+               --<>--
+               WHEN DBMS_TYPES.TYPECODE_BLOB
+               THEN
+                  DBMS_SQL.COLUMN_VALUE(
+                     method4.r_sql.cursor, i, r_fetch.blob_column
+                     );
+                  rws.SetBlob( r_fetch.blob_column );
+               --<>--
+               WHEN DBMS_TYPES.TYPECODE_DATE
+               THEN
+                  DBMS_SQL.COLUMN_VALUE(
+                     method4.r_sql.cursor, i, r_fetch.date_column
+                     );
+                  rws.SetDate( r_fetch.date_column );
+               --<>--
+               WHEN DBMS_TYPES.TYPECODE_RAW
+               THEN
+                  DBMS_SQL.COLUMN_VALUE_RAW(
+                     method4.r_sql.cursor, i, r_fetch.raw_column,
+                     r_fetch.raw_error, r_fetch.raw_length
+                     );
+                  rws.SetRaw( r_fetch.raw_column );
+               --<>--
+               WHEN DBMS_TYPES.TYPECODE_INTERVAL_DS
+               THEN
+                  DBMS_SQL.COLUMN_VALUE(
+                     method4.r_sql.cursor, i, r_fetch.ids_column
+                     );
+                  rws.SetIntervalDS( r_fetch.ids_column );
+               --<>--
+               WHEN DBMS_TYPES.TYPECODE_INTERVAL_YM
+               THEN
+                  DBMS_SQL.COLUMN_VALUE(
+                     method4.r_sql.cursor, i, r_fetch.iym_column
+                     );
+                  rws.SetIntervalYM( r_fetch.iym_column );
+               --<>--
+               WHEN DBMS_TYPES.TYPECODE_TIMESTAMP
+               THEN
+                  DBMS_SQL.COLUMN_VALUE(
+                     method4.r_sql.cursor, i, r_fetch.ts_column
+                     );
+                  rws.SetTimestamp( r_fetch.ts_column );
+               --<>--
+               WHEN DBMS_TYPES.TYPECODE_TIMESTAMP_TZ
+               THEN
+                  DBMS_SQL.COLUMN_VALUE(
+                     method4.r_sql.cursor, i, r_fetch.tstz_column
+                     );
+                  rws.SetTimestampTZ( r_fetch.tstz_column );
+               --<>--
+               WHEN DBMS_TYPES.TYPECODE_TIMESTAMP_LTZ
+               THEN
+                  DBMS_SQL.COLUMN_VALUE(
+                     method4.r_sql.cursor, i, r_fetch.tsltz_column
+                     );
+                  rws.SetTimestamplTZ( r_fetch.tsltz_column );
+               --<>--
+               WHEN DBMS_TYPES.TYPECODE_CLOB
+               THEN
+                  --<>--
+                  CASE method4.r_sql.description(i).col_type
+                     WHEN 8
+                     THEN
+                        LOOP
+                           DBMS_SQL.COLUMN_VALUE_LONG(
+                              method4.r_sql.cursor, i, 32767, r_fetch.cvl_offset,
+                              r_fetch.v2_column, r_fetch.cvl_length
+                              );
+                           r_fetch.clob_column := r_fetch.clob_column ||
+                                                  r_fetch.v2_column;
+                           r_fetch.cvl_offset := r_fetch.cvl_offset + 32767;
+                           EXIT WHEN r_fetch.cvl_length < 32767;
+                        END LOOP;
+                     ELSE
+                        DBMS_SQL.COLUMN_VALUE(
+                           method4.r_sql.cursor, i, r_fetch.clob_column
+                           );
+                     END CASE;
+                     rws.SetClob( r_fetch.clob_column );
+               --<>--
+            END CASE;
+         END LOOP;
+
+         /*
+         || Our ANYDATASET instance is complete. We end our create session...
+         */
+         rws.EndCreate();
+
+      END IF;
+
+      RETURN ODCIConst.Success;
+
+   END;
+
+   ----------------------------------------------------------------------------
+   MEMBER FUNCTION ODCITableClose(
                    SELF IN method4_poll_table_ot
                    ) RETURN NUMBER IS
       PRAGMA AUTONOMOUS_TRANSACTION;
