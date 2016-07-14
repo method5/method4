@@ -92,9 +92,9 @@ end;
 		--Get the owner and tablename.
 		--
 		--Split the value if there's a ".".
-		if instr(p_table_name, ',') > 0 then
-			method4.set_owner(upper(trim(substr(p_table_name, 1, instr(p_table_name, ',') - 1))));
-			method4.set_table_name(upper(trim(substr(p_table_name, instr(p_table_name, ',') + 1))));
+		if instr(p_table_name, '.') > 0 then
+			method4.set_owner(upper(trim(substr(p_table_name, 1, instr(p_table_name, '.') - 1))));
+			method4.set_table_name(upper(trim(substr(p_table_name, instr(p_table_name, '.') + 1))));
 		--Assume the owner is the current_schema
 		else
 			method4.set_owner(sys_context('userenv', 'current_schema'));
@@ -123,6 +123,8 @@ end;
 				'The table must be created with the keyword "ROWDEPENDENCIES", there is no '||
 				'way to change the setting after the table is created.');
 		end if;
+	exception when no_data_found then
+		raise_application_error(-20000, 'Could not find this table: '||p_table_name);
 	end;
 
 	---------------------------------------
