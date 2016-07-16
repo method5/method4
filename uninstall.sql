@@ -2,7 +2,7 @@ prompt
 prompt
 prompt **************************************************************************
 prompt    Method4 Uninstaller
-prompt    (c) oracle-developer.net
+prompt    (c) oracle-developer.net, Jon Heller
 prompt **************************************************************************
 prompt
 

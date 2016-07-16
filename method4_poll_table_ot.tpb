@@ -69,14 +69,22 @@ begin
 
 		end loop;
 
+		--Put the check *before* the condition query is run.
+		--This forces an extra evaluation of the FETCH, which may be necessary
+		--because a row may have been inserted between the FETCH and the condition SQL.
+		exit when v_condition = 1;
+
 		--Exit when condition is met.
 		execute immediate '#CONDITION'
 		into v_condition;
-		exit when v_condition = 1;
 
 		--Wait N seconds.
 		--Use execute immediate to simplify privilege requirements.
-		execute immediate 'begin dbms_lock.sleep(#SECONDS_TO_WAIT); end;';
+		if v_condition = 1 then
+			null;
+		else
+			execute immediate 'begin dbms_lock.sleep(#SECONDS_TO_WAIT); end;';
+		end if;
 	end loop;
 end;
 ]';

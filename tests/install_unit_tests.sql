@@ -6,7 +6,7 @@ prompt *************************************************************************
 prompt
 
 prompt Installing unit test package...
-@tests/method4_test.pck
+@@method4_test.pck
 prompt Running unit tests, this may take a minute...
 set serveroutput on
 set linesize 1000
