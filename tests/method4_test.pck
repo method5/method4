@@ -75,21 +75,41 @@ begin
 	end;
 
 	--Long column names.
-	declare
-		actual number;
-	begin
-		execute immediate q'<select * from table(method4.query('select count(*)+0+0+0+0+0+0+0+0+0+0+0 from dba_users where rownum = 1'))>'
-		into actual;
-		assert_equals('Long, default column name with 30 bytes.', '1', actual);
-	end;
+	-- Test 30 bytes in 12.1 and lower.
+	$IF DBMS_DB_VERSION.ver_le_10 or DBMS_DB_VERSION.ver_le_11 or DBMS_DB_VERSION.ver_le_12_1 $THEN
+		declare
+			actual number;
+		begin
+			execute immediate q'<select * from table(method4.query('select count(*)+0+0+0+0+0+0+0+0+0+0+0 from dba_users where rownum = 1'))>'
+			into actual;
+			assert_equals('Long, default column name with 30 bytes.', '1', actual);
+		end;
 
-	declare
-		actual number;
-	begin
-		execute immediate q'<select * from table(method4.query('select count(*)+0+0+0+0+0+0+0+0+0+0+0+0+0+0+0+0+0+0+0+0+0+0 from dba_users where rownum = 1'))>'
-		into actual;
-		assert_equals('Long, default column name with > 30 bytes.', '1', actual);
-	end;
+		declare
+			actual number;
+		begin
+			execute immediate q'<select * from table(method4.query('select count(*)+0+0+0+0+0+0+0+0+0+0+0+0+0+0+0+0+0+0+0+0+0+0 from dba_users where rownum = 1'))>'
+			into actual;
+			assert_equals('Long, default column name with > 30 bytes.', '1', actual);
+		end;
+	-- Test 128 bytes in 12.2 and higher.
+	$ELSE
+		declare
+			actual number;
+		begin
+			execute immediate q'<select * from table(method4.query('select count(*)+0+0+0+0+0+0+0+0+0+0+0+0+0+0+0+0+0+0+0+0+0+0+0+0+0+0+0+0+0+0+0+0+0+0+0+0+0+0+0+0+0+0+0+0+0+0+0+0+0+0+0+0+0+0+0+0+0+0+0+0 from dba_users where rownum = 1'))>'
+			into actual;
+			assert_equals('Long, default column name with 30 bytes.', '1', actual);
+		end;
+
+		declare
+			actual number;
+		begin
+			execute immediate q'<select * from table(method4.query('select count(*)+0+0+0+0+0+0+0+0+0+0+0+0+0+0+0+0+0+0+0+0+0+0+0+0+0+0+0+0+0+0+0+0+0+0+0+0+0+0+0+0+0+0+0+0+0+0+0+0+0+0+0+0+0+0+0+0+0+0+0+0+0+0+0+0+0+0+0+0 from dba_users where rownum = 1'))>'
+			into actual;
+			assert_equals('Long, default column name with > 30 bytes.', '1', actual);
+		end;
+	$END
 
 end test_simple;
 
