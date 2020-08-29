@@ -55,18 +55,6 @@ All modes convert LONGs to CLOBs, which can be helpful when querying the data di
 
 These queries are powerful but they can also be confusing because of all the quotation marks required to build strings inside strings.  Simplify your queries with the alternative quoting syntax (the "q" strings) and templating (use REPLACE instead of concatenating strings).
 
-## Notes
-
-Method4 is based on the Dictionary Long Application, (c) Adrian Billington www.oracle-developer.net.  Much of this code contains advanced methods thoroughly discussed on his website, http://www.oracle-developer.net/display.php?id=422
-
-Method4 is a simpler, more generic version of that application.  It can be useful for adhoc queries in highly dynamic environments.  For example, an application where the schemas, tables, and columns are table-driven and only known at run time.
-
-Use this program with caution.  Few programs need to be this dynamic.  This package will be slower and buggier than regular SQL.
-
-## License
-
-This project uses the MIT License.
-
 ## Installation
 
 Click the "Download ZIP" button, extract the files, CD to the directory with those files, connect to SQL*Plus, and run these commands:
@@ -86,3 +74,15 @@ Click the "Download ZIP" button, extract the files, CD to the directory with tho
 4. Uninstall unit tests (optional, only useful for development):
 
         @tests/uninstall_unit_tests
+
+## Notes
+
+Method4 is based on the Dictionary Long Application, (c) Adrian Billington www.oracle-developer.net.  Much of this code contains advanced methods thoroughly discussed on his website, http://www.oracle-developer.net/display.php?id=422
+
+Method4 is a simpler, more generic version of that application.  It can be useful for adhoc queries in highly dynamic environments.  For example, an application where the schemas, tables, and columns are table-driven and only known at run time.
+
+Use this program with caution.  Few programs need to be this dynamic.  This package will be slower and buggier than regular SQL.
+
+## License
+
+This project uses the MIT License.
