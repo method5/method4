@@ -208,18 +208,23 @@ begin
 	end;
 
 	--Long.
-	--This view is the same in 11g and 12c, hopefully it's the same in all versions.
 	declare
 		actual1 clob;
 	begin
 		execute immediate
 		q'<
-			select *
-			from table(method4.query('select text from dba_views where view_name = ''DBA_EXP_VERSION'''))
+			select trim(data_default)
+			from table(method4.query('
+				select data_default
+				from all_tab_columns
+				where owner = ''SYS''
+					and table_name = ''JOB$''
+					and column_name = ''FLAG''
+			'))
 		>'
 		into actual1;
 
-		assert_equals('Long 1.', 'select o.expid'||chr(10)||'from sys.incvid o', actual1);
+		assert_equals('Long 1.', '0', actual1);
 	end;
 
 	--Date.
