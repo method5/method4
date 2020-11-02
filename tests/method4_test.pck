@@ -479,6 +479,338 @@ end test_dynamic_query;
 
 
 --------------------------------------------------------------------------------
+procedure test_pivot is
+	v_column1 varchar2(4000);
+	v_column2 varchar2(4000);
+	v_column3 varchar2(4000);
+	v_column4 varchar2(4000);
+begin
+
+	-- Simple example.
+	--   select 'A' a, 'B' b, 'C' c from dual =>
+	--   A  B
+	--   -  -
+	--   A  C
+	execute immediate
+	q'<
+		select a, b from table(method4.pivot(q'[
+			select 'A' a, 'B' b, 'C' c from dual
+		]'))
+	>' --'
+	into v_column1, v_column2;
+
+	assert_equals('Simple example 1.', 'A', v_column1);
+	assert_equals('Simple example 2.', 'C', v_column2);
+
+
+	-- No rows with 3 or more columns - exclude the last two columns.
+	execute immediate
+	q'<
+		select max(a) from table(method4.pivot(q'[
+			select 'asdf' a, 'qwer' b, 'zxcv' c from dual where 1=0
+		]'))
+	>' --'
+	into v_column1;
+
+	assert_equals('No rows with 3 columns 1.', null, v_column1);
+
+
+	-- No rows with 2 columns - create fake colum named "NO_RESULTS".
+	execute immediate
+	q'<
+		select max(no_results) from table(method4.pivot(q'[
+			select 'asdf' a, 'qwer' b from dual where 1=0
+		]'))
+	>' --'
+	into v_column1;
+
+	assert_equals('No rows with 2 columns 1.', null, v_column1);
+
+
+	-- Up to 1000 columns are allowed.
+	execute immediate
+	q'<
+		select "999" from table(method4.pivot(q'[
+			select 1 A, level B, level C from dual connect by level <= 999
+		]'))
+	>' --'
+	into v_column1;
+
+	assert_equals('1000 columns.', '999', v_column1);
+
+
+	-- Too many columns. Only 1000 columns are allowed.
+	declare
+		v_maximum_columns exception;
+		pragma exception_init(v_maximum_columns, -1792);
+	begin
+		execute immediate
+		q'<
+			select "999" from table(method4.pivot(q'[
+				select 1 A, level B, level C from dual connect by level <= 1000
+			]'))
+		>' --'
+		into v_column1;
+
+		assert_equals('1001 columns.', 'Exception', 'No exception');
+	exception when v_maximum_columns then
+		assert_equals('1001 columns.', 'Exception', 'Exception');
+	end;
+
+
+	-- 1 column - raises exception.
+	declare
+		v_custom_exception exception;
+		pragma exception_init(v_custom_exception, -20000);
+	begin
+		execute immediate
+		q'<
+			select * from table(method4.pivot(q'[
+				select 1 A from dual
+			]'))
+		>' --'
+		into v_column1;
+
+		assert_equals('1 column 1.', 'Exception', 'No exception');
+	exception when v_custom_exception then
+		assert_equals('1 column 2.', 'Exception', 'Exception');
+	end;
+
+
+	-- 2 columns.
+	execute immediate
+	q'<
+		select "1" from table(method4.pivot(q'[
+			select 1 A, 2 B from dual
+		]'))
+	>' --'
+	into v_column1;
+
+	assert_equals('2 columns 1.', '2', v_column1);
+
+
+	-- 4 columns.
+	execute immediate
+	q'<
+		select A, B, "3" from table(method4.pivot(q'[
+			select 1 A, 2 B, 3 C, 4 D from dual union all
+			select 1 A, 2 B, 3 C, 4 D from dual union all
+			select 1 A, 2 B, 3 C, 4 D from dual
+		]'))
+	>' --'
+	into v_column1, v_column2, v_column3;
+
+	assert_equals('4 columns 1.', '1', v_column1);
+	assert_equals('4 columns 2.', '2', v_column2);
+	assert_equals('4 columns 3.', '4', v_column3);
+
+
+	-- Weird column names.
+	execute immediate
+	q'<
+		select "1A~!@#$%^*()-= ' <>?,./" from table(method4.pivot(q'[
+			select 1 A, '1A~!@#$%^*()-= '' <>?,./' B, 1 C from dual
+		]'))
+	>' --'
+	into v_column1;
+
+	assert_equals('Weird column names.', '1', v_column1);
+
+
+	-- Null column names are set to "NULL_COLUMN_NAME" for numbers.
+	execute immediate
+	q'<
+		select a, "2", null_column_name from table(method4.pivot(q'[
+			select 1 A, 2 B, 3 C from dual union all
+			select 1 A, null B, 4 C from dual
+		]'))
+	>' --'
+	into v_column1, v_column2, v_column3;
+
+	assert_equals('Null column name for numbers 1.', '1', v_column1);
+	assert_equals('Null column name for numbers 2.', '3', v_column2);
+	assert_equals('Null column name for numbers 3.', '4', v_column3);
+
+
+	-- Null column names are set to "NULL_COLUMN_NAME" for varchars.
+	execute immediate
+	q'<
+		select a, c1, null_column_name from table(method4.pivot(q'[
+			select 1 A, 'C1' B, 3 C from dual union all
+			select 1 A, null B, 4 C from dual
+		]'))
+	>' --'
+	into v_column1, v_column2, v_column3;
+
+	assert_equals('Null column name for varchars 1.', '1', v_column1);
+	assert_equals('Null column name for varchars 2.', '3', v_column2);
+	assert_equals('Null column name for varchars 3.', '4', v_column3);
+
+
+	-- Column names longer than 128 are supported.
+	-- (They will be named like AAA..._001, AAA..._002, but that's too hard to test.)
+	execute immediate
+	q'<
+		select * from table(method4.pivot(q'[
+			select 'A' col1, lpad('A', 128, 'A')||'A' col2, 0 col3 from dual union all
+			select 'A' col1, lpad('A', 128, 'A')||'B' col2, 1 col3 from dual
+		]'))
+	>' --'
+	into v_column1, v_column2, v_column3;
+
+	assert_equals('Column names longer than 128 1.', 'A', v_column1);
+	assert_equals('Column names longer than 128 2.', '0', v_column2);
+	assert_equals('Column names longer than 128 3.', '1', v_column3);
+
+
+	-- Input SQL is invalid - will throw a meaningful error message.
+	-- ORA-00933: SQL command not properly ended
+	declare
+		v_sql_command_not_prop_ended exception;
+		pragma exception_init(v_sql_command_not_prop_ended, -00933);
+	begin
+		execute immediate
+		q'<
+			select * from table(method4.pivot(q'[
+				select * from dual asdf asdf
+			]'))
+		>' --'
+		into v_column1;
+
+		assert_equals('1 column 1.', 'Exception', 'No exception');
+	exception when v_sql_command_not_prop_ended then
+		assert_equals('1 column 2.', 'Exception', 'Exception');
+	end;
+
+
+	-- Duplicate long-column names in 12.2 - will use "_1" and shorten name to avoid dupes and length limit.
+	if ora_max_name_len = 128 then
+		execute immediate
+		q'<
+			select
+				AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA,
+				B,
+				AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA_1,
+				B_1
+			from table(method4.pivot(q'[
+				select 1 AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA, 2 B, lpad('A', 128, 'A') C, 3 D from dual union all
+				select 1 AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA, 2 B, 'B' C, 4 D from dual
+			]'))
+		>' --'
+		into v_column1, v_column2, v_column3, v_column4;
+
+		assert_equals('Duplicate long-column names 1.', '1', v_column1);
+		assert_equals('Duplicate long-column names 2.', '2', v_column2);
+		assert_equals('Duplicate long-column names 3.', '3', v_column3);
+		assert_equals('Duplicate long-column names 4.', '4', v_column4);
+	end if;
+
+
+	-- Columns are sorted alphabetically.
+	execute immediate
+	q'<
+		select * from table(method4.pivot(q'[
+			select 1 A, 'col3' B, 4 C from dual union all
+			select 1 A, 'col1' B, 2 C from dual union all
+			select 1 A, 'col2' B, 3 C from dual
+		]'))
+	>' --'
+	into v_column1, v_column2, v_column3, v_column4;
+
+	assert_equals('Columns are sorted 1.', '1', v_column1);
+	assert_equals('Columns are sorted 2.', '2', v_column2);
+	assert_equals('Columns are sorted 3.', '3', v_column3);
+	assert_equals('Columns are sorted 4.', '4', v_column4);
+
+
+	-- Numeric columns are allowed.
+	execute immediate
+	q'<
+		select A, "2" from table(method4.pivot(q'[
+			select 1 A, 2.0 B, 3 C from dual union all
+			select 1 A, 2   B, 3 C from dual
+		]'))
+	>' --'
+	into v_column1, v_column2;
+
+	assert_equals('Numeric column names 1.', '1', v_column1);
+	assert_equals('Numeric column names 2.', '3', v_column2);
+
+
+	-- Date values are allowed and not converted to strings.
+	execute immediate
+	q'<
+		select to_char(b, 'YYYY-MM-DD HH24:MI:SS') the_date from table(method4.pivot(q'[
+			select 1 A, 'B' B, date '2020-01-01' C from dual union all
+			select 1 A, 'B' B, date '2020-01-02' C from dual
+		]'))
+	>' --'
+	into v_column1;
+
+	assert_equals('Date values 1.', '2020-01-02 00:00:00', v_column1);
+
+
+	-- Timestamp values are allowed and not converted to strings.
+	execute immediate
+	q'<
+		select to_char(b, 'YYYY-MM-DD HH24:MI:SS') the_date from table(method4.pivot(q'[
+			select 1 A, 'B' B, timestamp '2020-01-01 12:01:02' C from dual union all
+			select 1 A, 'B' B, timestamp '2020-01-02 12:01:02' C from dual
+		]'))
+	>' --'
+	into v_column1;
+
+	assert_equals('Timestamp values 1.', '2020-01-02 12:01:02', v_column1);
+
+
+	-- Date, timestamp, and interval columns are not allowed for setting column names.
+	declare
+		v_custom_exception exception;
+		pragma exception_init(v_custom_exception, -20000);
+	begin
+		execute immediate
+		q'<
+			select * from table(method4.pivot(q'[
+				select 1 A, date '2020-01-01' B, 3 C from dual union all
+				select 1 A, date '2020-01-01' B, 3 C from dual
+			]'))
+		>' --'
+		into v_column1;
+
+		assert_equals('Dates not allowed 1. ', 'Exception', 'No exception');
+	exception when v_custom_exception then
+		assert_equals('Dates not allowed 2.', 'Exception', 'Exception');
+	end;
+
+	-- Different aggregate functions - COUNT.
+	execute immediate
+	q'<
+		select B from table(method4.pivot(q'[
+			select 1 A, 'B' B, 0 C from dual union all
+			select 1 A, 'B' B, null C from dual
+		]', 'count'))
+	>' --'
+	into v_column1;
+
+	assert_equals('Aggregate function COUNT.', '1', v_column1);
+
+
+	-- Different aggregate functions - SUM.
+	execute immediate
+	q'<
+		select B from table(method4.pivot(q'[
+			select 1 A, 'B' B, 0.5 C from dual union all
+			select 1 A, 'B' B, 1.5 C from dual
+		]', 'sum'))
+	>' --'
+	into v_column1;
+
+	assert_equals('Aggregate function SUM.', '2', v_column1);
+
+end test_pivot;
+
+
+--------------------------------------------------------------------------------
 procedure test_poll_table is
 	v_table_or_view_does_not_exist exception;
 	pragma exception_init(v_table_or_view_does_not_exist, -00942);
@@ -548,6 +880,7 @@ begin
 	test_simple;
 	test_types;
 	test_dynamic_query;
+	test_pivot;
 	test_poll_table;
 
 	--Print summary of results.

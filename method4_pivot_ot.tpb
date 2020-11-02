@@ -1,22 +1,264 @@
-CREATE OR REPLACE TYPE BODY method4_ot AS
+CREATE OR REPLACE TYPE BODY method4_pivot_ot AS
 --See Method4 package specification for details.
+--Many methods in this type are almost identical to those in METHOD4_OT.
+--Inheritence could simplify the code but causes unsolvable OCI errors in 11g.
+
+----------------------------------------------------------------------------
+static function get_pivot_sql(p_sql in varchar2, p_aggregate_function in varchar2) return varchar2 is
+
+	v_cursor_id integer;
+	v_col_cnt integer;
+	--This type only works in Oracle 10g+. It's necessary to support 128-byte column names.
+	v_columns dbms_sql.desc_tab2;
+
+	v_penultimate_column varchar2(128);
+	v_last_column varchar2(128);
+
+	v_distinct_sql clob;
+	v_pivot_columns sys.odcivarchar2list;
+
+	c_numeric_magic_value constant varchar2(4000) := '-987654321.1234';
+	c_varchar_magic_value constant varchar2(4000) := 'Not a real value !@#1234';
+
+	v_has_null_column_name boolean := false;
+	v_nvl_column_list clob;
+
+
+	type string_aat is table of varchar2(4000) index by varchar2(4000);
+	v_ordered_pivot_columns string_aat;
+	v_identifier_too_long_counter number := 0;
+	v_column varchar2(4000);
+
+	v_in_clause clob;
+	v_pivot_sql clob := '
+select * from
+(
+	#BEGIN_NVL_FOR_NULL_COLUMN_NAMES#
+	#ORIGINAL_SQL#
+	#END_NVL_FOR_NULL_COLUMN_NAMES#
+)
+pivot (#AGGREGATE_FUNCTION#("#LAST_COLUMN#") for "#PENULTIMATE_COLUMN#" in (#IN_CLAUSE#))';
+
+	--Change pivot column names that match existing columns.
+	procedure change_ambiguous_column_names(p_ordered_pivot_columns in out string_aat, p_columns in dbms_sql.desc_tab2) is
+		v_new_column varchar2(4000);
+		v_counter number := 0;
+		v_suffix varchar2(4);
+	begin
+		--Look at all columns except the last two (which won't be in the final query).
+		for i in 1 .. p_columns.count - 2 loop
+			v_counter := 0;
+			if p_ordered_pivot_columns.exists(p_columns(i).col_name) then
+				--Look for an available name.
+				for j in v_counter .. 1000 loop
+					v_counter := v_counter + 1;
+					v_suffix := '_'||v_counter;
+					v_new_column := p_columns(i).col_name || v_suffix;
+
+					--Shorten the name and add the suffix if it exceeds the max length.
+					if length(v_new_column) > ora_max_name_len then
+						v_new_column := substr(p_columns(i).col_name, 1, ora_max_name_len - length(v_suffix)) || v_suffix;
+					--Otherwise simply add the suffix.
+					else
+						v_new_column := p_columns(i).col_name || v_suffix;
+					end if;
+
+					--Quit this loop if the new name also already exists.
+					if p_ordered_pivot_columns.exists(v_new_column) then
+						continue;
+					--Add new name, remove new name, and exit if the new name is distinct.
+					else
+						p_ordered_pivot_columns(v_new_column) := p_ordered_pivot_columns(p_columns(i).col_name);
+						p_ordered_pivot_columns.delete(p_columns(i).col_name);
+						exit;
+					end if;
+				end loop;
+			end if;
+		end loop;
+	end change_ambiguous_column_names;
+
+begin
+	--Use the cached value if it exists.
+	--(This way the pivot SQL won't be regenerated for both Describe and Start.)
+	if method4.r_pivot_sql is not null then
+		return method4.r_pivot_sql;
+	end if;
+
+	--Otherwise regenerate the whole query.
+	v_cursor_id := dbms_sql.open_cursor;
+	dbms_sql.parse(v_cursor_id, p_sql, dbms_sql.native);
+	dbms_sql.describe_columns2(v_cursor_id, v_col_cnt, v_columns);
+
+	--Must be at least two columns.
+	if v_columns.count <= 1 then
+		raise_application_error(-20000, 'The SQL statement must have at least two columns.');
+	end if;
+
+	--Do not allow dates, timestamps, and intervals as column name column.
+	if v_columns(v_columns.count-1).col_type in (12, 180, 181, 182, 183, 231) then
+		raise_application_error(-20000, 'To avoid implicit conversion problems, the second to last '||
+		'column cannot be a date, timestamp, or interval. Try explicitly casting the column to a '||
+		'string with TO_CHAR.');
+	end if;
+
+	--Set some important column names.
+	v_penultimate_column := v_columns(v_columns.count - 1).col_name;
+	v_last_column        := v_columns(v_columns.count).col_name;
+
+	--Get a distinct set of values from the second-to-last column.
+	v_distinct_sql := 'select distinct "' || v_penultimate_column || '" from ' || chr(10) ||
+		'(' || chr(10) || p_sql || chr(10) || ') order by 1';
+
+	declare
+		v_index_out_of_range exception;
+		pragma exception_init(v_index_out_of_range, -22165);
+	begin
+		execute immediate v_distinct_sql bulk collect into v_pivot_columns;
+	exception when v_index_out_of_range then
+		raise_application_error(-20000, 'The query contains more than 32K pivoting columns.');
+	end;
+
+	--Convert to a sorted associative array, handle nulls, handle columns larger than 30 or 128 bytes.
+	--In the associative array, the key is the column name and the value is the column value. (Not always the same thing.)
+	for i in 1 .. v_pivot_columns.count loop
+		if v_pivot_columns(i) is null then
+			v_has_null_column_name := true;
+
+			--Use special value for numbers.
+			if v_columns(v_columns.count-1).col_type in (2, 100, 101) then
+				v_ordered_pivot_columns('NULL_COLUMN_NAME') := c_numeric_magic_value;
+			--Use special value for strings.
+			else
+				v_ordered_pivot_columns('NULL_COLUMN_NAME') := c_varchar_magic_value;
+			end if;
+		else
+			--Shrink the name if necessary.
+			if length(v_pivot_columns(i)) > ora_max_name_len then
+				v_identifier_too_long_counter := v_identifier_too_long_counter + 1;
+				v_ordered_pivot_columns( substr(v_pivot_columns(i), 1, ora_max_name_len - 4)
+					|| '_' || lpad(v_identifier_too_long_counter, 3, 0)) := v_pivot_columns(i);
+			else
+				v_ordered_pivot_columns(v_pivot_columns(i)) := v_pivot_columns(i);
+			end if;
+		end if;
+	end loop;
+
+	--Remove pivot column names that match existing columns.
+	change_ambiguous_column_names(v_ordered_pivot_columns, v_columns);
+
+	--Create pivot SQL for normal cases with at least one dynamic column.
+	if v_ordered_pivot_columns.count >= 1 then
+
+		-- Need to use NVL to handle NULL column names.
+		if v_has_null_column_name then
+			for i in 1 .. v_columns.count loop
+				--Add NVL to penultimate column.
+				if i = v_columns.count - 1 then
+					--Use a different magic value for numbers and string.
+					if v_columns(v_columns.count-1).col_type in (2, 100, 101) then
+						v_nvl_column_list := v_nvl_column_list || ', NVL("' || v_columns(i).col_name || '", ' || c_numeric_magic_value || ') "' || v_columns(i).col_name || '"';
+					else
+						v_nvl_column_list := v_nvl_column_list || ', NVL("' || v_columns(i).col_name || '", ''' || c_varchar_magic_value || ''') "' || v_columns(i).col_name || '"';
+					end if;
+
+				--Leave other columns alone.
+				else
+					v_nvl_column_list := v_nvl_column_list || ', "' || v_columns(i).col_name || '"';
+				end if;
+			end loop;
+
+			v_nvl_column_list := substr(v_nvl_column_list, 2);
+
+			v_nvl_column_list := '	select ' || v_nvl_column_list || ' from ' || chr(10) || '	(';
+
+			v_pivot_sql := replace(v_pivot_sql, '	#BEGIN_NVL_FOR_NULL_COLUMN_NAMES#', v_nvl_column_list);
+			v_pivot_sql := replace(v_pivot_sql, '#END_NVL_FOR_NULL_COLUMN_NAMES#', ')');
+
+		else
+			v_pivot_sql := replace(v_pivot_sql, '	#BEGIN_NVL_FOR_NULL_COLUMN_NAMES#', null);
+			v_pivot_sql := replace(v_pivot_sql, '	#END_NVL_FOR_NULL_COLUMN_NAMES#', null);
+		end if;
+
+		--Create the list of column names and values.
+		v_column := v_ordered_pivot_columns.first;
+		while v_column is not null loop
+
+			--Convert to numeric literal for number (2), float (100), or double (101)
+			if v_columns(v_columns.count-1).col_type in (2, 100, 101) then
+				v_in_clause := v_in_clause || v_ordered_pivot_columns(v_column) ||
+					' as "' || v_column||'", ';
+			--Convert to string literal otherwise.
+			else
+				v_in_clause := v_in_clause || '''' ||
+					replace(v_ordered_pivot_columns(v_column), '''', '''''') ||
+					''' as "'||v_column||'", ';
+			end if;
+
+			v_column := v_ordered_pivot_columns.next(v_column);
+		end loop;
+
+		v_in_clause := substr(v_in_clause, 1, length(v_in_clause)-2);
+
+		v_pivot_sql := replace(v_pivot_sql, '#ORIGINAL_SQL#', p_sql);
+		v_pivot_sql := replace(v_pivot_sql, '#AGGREGATE_FUNCTION#', p_aggregate_function);
+		v_pivot_sql := replace(v_pivot_sql, '#LAST_COLUMN#', v_last_column);
+		v_pivot_sql := replace(v_pivot_sql, '#PENULTIMATE_COLUMN#', v_penultimate_column);
+		v_pivot_sql := replace(v_pivot_sql, '#IN_CLAUSE#', v_in_clause);
+
+	--Create pivot SQL where there are no rows and 3 or more columns - display everything but last two columns.
+	elsif v_ordered_pivot_columns.count = 0 and v_columns.count >= 3 then
+		v_pivot_sql := 'select ';
+
+		for i in 1 .. v_columns.count - 2 loop
+			v_pivot_sql := v_pivot_sql || v_columns(i).col_name || ', ';
+		end loop;
+
+		--Remove extra ',' at the end.
+		v_pivot_sql := substr(v_pivot_sql, 1, length(v_pivot_sql)-2);
+
+		--Add original SQL to generate correct types.
+		v_pivot_sql := v_pivot_sql || ' from '||chr(10)||'('||chr(10)||p_sql||chr(10)||')';
+
+	--Create pivot SQL where there are no rows and 2 columns - create fake column named "NO_RESULTS".
+	elsif v_ordered_pivot_columns.count = 0 and v_columns.count = 2 then
+		v_pivot_sql := 'select cast(null as varchar2(1)) no_results from dual';
+	end if;
+
+	--TESTING:
+	--(DBMS_OUTPUT does not work on errors so you may need to change the SQL.)
+	--dbms_output.put_line(v_pivot_sql);
+	--v_pivot_sql := 'select * from dual';
+
+	dbms_sql.close_cursor(v_cursor_id);
+
+	return v_pivot_sql;
+exception when others then
+	dbms_sql.close_cursor(v_cursor_id);
+	raise;
+end get_pivot_sql;
+
 
    ----------------------------------------------------------------------------
    STATIC FUNCTION ODCITableDescribe(
                    rtype   OUT ANYTYPE,
-                   stmt    IN  VARCHAR2
+                   stmt    IN  VARCHAR2,
+                   p_aggregate_function IN VARCHAR2 DEFAULT 'MAX'
                    ) RETURN NUMBER IS
 
       r_sql   method4.rt_dynamic_sql;
       v_rtype ANYTYPE;
+	  v_pivot_sql CLOB;
 
   BEGIN
+      --Clear the old pivot SQL and get a new one.
+      method4.r_pivot_sql := null;
+      v_pivot_sql := get_pivot_sql(stmt, p_aggregate_function);
 
       /*
       || Parse the SQL and describe its format and structure.
       */
       r_sql.cursor := DBMS_SQL.OPEN_CURSOR;
-      DBMS_SQL.PARSE( r_sql.cursor, stmt, DBMS_SQL.NATIVE );
+      DBMS_SQL.PARSE( r_sql.cursor, v_pivot_sql, DBMS_SQL.NATIVE );
       DBMS_SQL.DESCRIBE_COLUMNS2( r_sql.cursor, r_sql.column_cnt, r_sql.description );
       DBMS_SQL.CLOSE_CURSOR( r_sql.cursor );
 
@@ -124,9 +366,10 @@ CREATE OR REPLACE TYPE BODY method4_ot AS
 
    ----------------------------------------------------------------------------
    STATIC FUNCTION ODCITablePrepare(
-                   sctx    OUT method4_ot,
+                   sctx    OUT method4_pivot_ot,
                    tf_info IN  sys.ODCITabFuncInfo,
-                   stmt    IN  VARCHAR2
+                   stmt    IN  VARCHAR2,
+                   p_aggregate_function IN VARCHAR2 DEFAULT 'MAX'
                    ) RETURN NUMBER IS
 
       r_meta method4.rt_anytype_metadata;
@@ -146,7 +389,7 @@ CREATE OR REPLACE TYPE BODY method4_ot AS
       || Using this, we initialise the scan context for use in this and
       || subsequent executions of the same dynamic SQL cursor...
       */
-      sctx := method4_ot(r_meta.type);
+      sctx := method4_pivot_ot(r_meta.type);
 
       RETURN ODCIConst.Success;
 
@@ -154,20 +397,23 @@ CREATE OR REPLACE TYPE BODY method4_ot AS
 
    ----------------------------------------------------------------------------
    STATIC FUNCTION ODCITableStart(
-                   sctx IN OUT method4_ot,
-                   stmt IN     VARCHAR2
+                   sctx IN OUT method4_pivot_ot,
+                   stmt IN     VARCHAR2,
+                   p_aggregate_function IN VARCHAR2 DEFAULT 'MAX'
                    ) RETURN NUMBER IS
 
       r_meta method4.rt_anytype_metadata;
+	  v_pivot_sql CLOB;
 
   BEGIN
+      v_pivot_sql := get_pivot_sql(stmt, p_aggregate_function);
 
       /*
       || We now describe the cursor again and use this and the described
       || ANYTYPE structure to define and execute the SQL statement...
       */
       method4.r_sql.cursor := DBMS_SQL.OPEN_CURSOR;
-      DBMS_SQL.PARSE( method4.r_sql.cursor, stmt, DBMS_SQL.NATIVE );
+      DBMS_SQL.PARSE( method4.r_sql.cursor, v_pivot_sql, DBMS_SQL.NATIVE );
       DBMS_SQL.DESCRIBE_COLUMNS2( method4.r_sql.cursor,
                                   method4.r_sql.column_cnt,
                                   method4.r_sql.description );
@@ -297,7 +543,7 @@ CREATE OR REPLACE TYPE BODY method4_ot AS
 
    ----------------------------------------------------------------------------
    MEMBER FUNCTION ODCITableFetch(
-                   SELF   IN OUT method4_ot,
+                   SELF   IN OUT method4_pivot_ot,
                    nrows  IN     NUMBER,
                    rws    OUT    ANYDATASET
                    ) RETURN NUMBER IS
@@ -496,7 +742,7 @@ CREATE OR REPLACE TYPE BODY method4_ot AS
 
    ----------------------------------------------------------------------------
    MEMBER FUNCTION ODCITableClose(
-                   SELF IN method4_ot
+                   SELF IN method4_pivot_ot
                    ) RETURN NUMBER IS
    BEGIN
       DBMS_SQL.CLOSE_CURSOR( method4.r_sql.cursor );
