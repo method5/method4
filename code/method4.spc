@@ -1,6 +1,6 @@
-CREATE OR REPLACE PACKAGE method4 AS
+CREATE OR REPLACE PACKAGE method4 AUTHID CURRENT_USER AS
 
-   C_VERSION constant varchar2(10) := '2.2.0';
+   C_VERSION constant varchar2(10) := '2.2.1';
 
    /*
    || ---------------------------------------------------------------------------------
@@ -162,6 +162,9 @@ CREATE OR REPLACE PACKAGE method4 AS
    r_statement_cache statement_cache_type;
 
    r_pivot_sql clob;
+
+   --Common procedures used by multiple types.
+   procedure purge_sql(p_search_string varchar2);
 
    --Contexts used by METHOD4_POLL_TABLE.
    procedure set_temp_object_id(p_temp_object_id varchar2);

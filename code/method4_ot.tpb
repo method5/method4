@@ -162,6 +162,8 @@ CREATE OR REPLACE TYPE BODY method4_ot AS
 
   BEGIN
 
+      method4.purge_sql('method4.query');
+
       /*
       || We now describe the cursor again and use this and the described
       || ANYTYPE structure to define and execute the SQL statement...

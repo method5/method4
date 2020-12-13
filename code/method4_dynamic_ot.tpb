@@ -211,6 +211,8 @@ CREATE OR REPLACE TYPE BODY method4_dynamic_ot AS
 
   BEGIN
 
+      method4.purge_sql('method4.dynamic_query');
+
       /*
       || We now describe the cursor again and use this and the described
       || ANYTYPE structure to define and execute the SQL statement...

@@ -49,6 +49,16 @@ end assert_equals;
 
 
 --------------------------------------------------------------------------------
+procedure drop_table_ignore_not_exists(p_table_name varchar2) is
+	v_table_does_not_exist exception;
+	pragma exception_init(v_table_does_not_exist, -942);
+begin
+	execute immediate 'drop table ' || p_table_name  || '  purge';
+exception when v_table_does_not_exist then null;
+end drop_table_ignore_not_exists;
+
+
+--------------------------------------------------------------------------------
 procedure test_simple is
 	procedure test_small_identifiers is
 	begin
@@ -125,6 +135,53 @@ begin
 		test_long_identifiers;
 	$END
 
+	--Re-parses SQL each time to catch changes to underlying tables.
+	declare
+		v_actual1 number;
+		v_actual2 number;
+	begin
+		--Setup
+		drop_table_ignore_not_exists('temp_method4_test');
+		execute immediate 'create table temp_method4_test as select 1 a from dual';
+
+		--At first there is only one column.
+		execute immediate
+		q'<
+			select *
+			from table(method4.query('select * from temp_method4_test'))
+		>'
+		into v_actual1;
+
+		assert_equals('Reparsing 1.', '1', v_actual1);
+
+		--Add a second column.
+		execute immediate 'alter table temp_method4_test add b number default 2';
+
+		execute immediate
+		q'<
+			select *
+			from table(method4.query('select * from temp_method4_test'))
+		>'
+		into v_actual1, v_actual2;
+
+		assert_equals('Reparsing 2a.', '1', v_actual1);
+		assert_equals('Reparsing 2b.', '2', v_actual2);
+
+		--Remove the second column.
+		execute immediate 'alter table temp_method4_test drop column b';
+
+		execute immediate
+		q'<
+			select *
+			from table(method4.query('select * from temp_method4_test'))
+		>'
+		into v_actual1;
+
+		assert_equals('Reparsing 3.', '1', v_actual1);
+
+		--Teardown.
+		drop_table_ignore_not_exists('temp_method4_test');
+	end;
 end test_simple;
 
 
@@ -442,7 +499,7 @@ begin
 			q'[
 				select 'select 1 a from dual' from dual
 			]'))
-		>' --'--Fix PL/SQL parser bug.
+		>' --'--Fix PL/SQL Developer parser bug.
 		into actual1;
 
 		assert_equals('Dynamic query 1.', '1', actual1);
@@ -473,6 +530,54 @@ begin
 		assert_equals('Dynamic query multiple queries 4.', 'V_$DATABASE', actual_name(1));
 		assert_equals('Dynamic query multiple queries 5.', 'V_$INSTANCE', actual_name(2));
 		assert_equals('Dynamic query multiple queries 6.', 'V_$TIMER', actual_name(3));
+	end;
+
+	--Re-parses SQL each time to catch changes to underlying tables.
+	declare
+		v_actual1 number;
+		v_actual2 number;
+	begin
+		--Setup
+		drop_table_ignore_not_exists('temp_method4_test');
+		execute immediate 'create table temp_method4_test as select 1 a from dual';
+
+		--At first there is only one column.
+		execute immediate
+		q'<
+			select *
+			from table(method4.dynamic_query('select ''select * from temp_method4_test'' from dual'))
+		>'
+		into v_actual1;
+
+		assert_equals('Reparsing 1.', '1', v_actual1);
+
+		--Add a second column.
+		execute immediate 'alter table temp_method4_test add b number default 2';
+
+		execute immediate
+		q'<
+			select *
+			from table(method4.dynamic_query('select ''select * from temp_method4_test'' from dual'))
+		>'
+		into v_actual1, v_actual2;
+
+		assert_equals('Reparsing 2a.', '1', v_actual1);
+		assert_equals('Reparsing 2b.', '2', v_actual2);
+
+		--Remove the second column.
+		execute immediate 'alter table temp_method4_test drop column b';
+
+		execute immediate
+		q'<
+			select *
+			from table(method4.dynamic_query('select ''select * from temp_method4_test'' from dual'))
+		>'
+		into v_actual1;
+
+		assert_equals('Reparsing 3.', '1', v_actual1);
+
+		--Teardown.
+		drop_table_ignore_not_exists('temp_method4_test');
 	end;
 
 end test_dynamic_query;
@@ -807,6 +912,50 @@ begin
 
 	assert_equals('Aggregate function SUM.', '2', v_column1);
 
+
+	--Re-parses SQL each time to catch changes to underlying tables.
+
+	--Setup
+	drop_table_ignore_not_exists('temp_method4_test');
+	execute immediate 'create table temp_method4_test as select 1 a, 2 b from dual';
+
+	--At first there is only two columns.
+	execute immediate
+	q'<
+		select *
+		from table(method4.pivot('select * from temp_method4_test'))
+	>'
+	into v_column1;
+
+	assert_equals('Reparsing 1.', '2', v_column1);
+
+	--Add a third column.
+	execute immediate 'alter table temp_method4_test add c number default 3';
+
+	execute immediate
+	q'<
+		select *
+		from table(method4.pivot('select * from temp_method4_test'))
+	>'
+	into v_column1, v_column2;
+
+	assert_equals('Reparsing 2a.', '1', v_column1);
+	assert_equals('Reparsing 2b.', '3', v_column2);
+
+	--Remove the third column.
+	execute immediate 'alter table temp_method4_test drop column c';
+
+	execute immediate
+	q'<
+		select *
+		from table(method4.pivot('select * from temp_method4_test'))
+	>'
+	into v_column1;
+
+	assert_equals('Reparsing 3.', '2', v_column1);
+
+	--Teardown.
+	drop_table_ignore_not_exists('temp_method4_test');
 end test_pivot;
 
 

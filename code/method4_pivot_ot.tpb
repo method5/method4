@@ -407,6 +407,7 @@ end get_pivot_sql;
 
   BEGIN
       v_pivot_sql := get_pivot_sql(stmt, p_aggregate_function);
+      method4.purge_sql('method4.pivot');
 
       /*
       || We now describe the cursor again and use this and the described

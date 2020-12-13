@@ -249,26 +249,12 @@ end ODCITableDescribe;
                    p_refresh_seconds         IN NUMBER DEFAULT 3
                    ) RETURN NUMBER IS
 
-      type string_table is table of varchar2(32767);
-      v_sql_ids string_table;
       r_meta method4.rt_anytype_metadata;
       v_new_stmt VARCHAR2(32767);
 
   BEGIN
-      --Find SQL_IDs of the SQL statements used to call Method4.
-      --Use dynamic SQL to enable roles to select from GV$SQL.
-      EXECUTE IMMEDIATE q'[
-            select 'begin sys.dbms_shared_pool.purge('''||address||' '||hash_value||''', ''C''); end;' v_sql
-            from sys.gv_$sql
-            where lower(sql_text) like '%method4.poll_table%'
-      ]'
-      BULK COLLECT INTO v_sql_ids;
 
-      --Purge each SQL_ID to force hard-parsing each time.
-      --This cannot be done in the earlier Describe or Prepare phase or it will generate errors.
-      FOR i IN 1 .. v_sql_ids.count LOOP
-            EXECUTE IMMEDIATE v_sql_ids(i);
-      END LOOP;
+      method4.purge_sql('method4.poll_table');
 
       v_new_stmt := 'select * from table(M4_TEMP_FUNCTION_'||sys_context('method4_context', 'temp_object_id')||')';
 
