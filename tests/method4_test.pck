@@ -960,58 +960,6 @@ end test_pivot;
 
 
 --------------------------------------------------------------------------------
-procedure test_poll_table is
-	v_table_or_view_does_not_exist exception;
-	pragma exception_init(v_table_or_view_does_not_exist, -00942);
-
-	--Create objects used for testing.
-	procedure setup is
-	begin
-		execute immediate 'create table m4_temp_test_table1(a number) rowdependencies';
-		execute immediate 'insert into m4_temp_test_table1 values(1)';
-		commit;
-	end;
-
-	--Remove objects used for testing.
-	procedure tear_down is
-	begin
-		begin
-			execute immediate 'drop table m4_temp_test_table1 purge';
-		exception when v_table_or_view_does_not_exist then null;
-		end;
-	end;
-begin
-	--Remove any leftover objects and create new ones.
-	tear_down;
-	setup;
-
-	--Dynamic, only one query.
-	declare
-		actual1 number;
-	begin
-		--Setup
-
-		execute immediate
-		q'<
-			select * from table(method4.poll_table(
-			   p_table_name              => 'm4_temp_test_table1',
-			   p_sql_statement_condition => 'select 1 from dual',
-			   p_refresh_seconds         => 2
-			))
-		>'
-		into actual1;
-
-		assert_equals('Poll table 1.', '1', actual1);
-	end;
-
-	--TODO - more tests.
-
-	--Cleanup.
-	tear_down;
-end test_poll_table;
-
-
---------------------------------------------------------------------------------
 procedure run is
 begin
 	--Reset counters.
@@ -1030,7 +978,6 @@ begin
 	test_types;
 	test_dynamic_query;
 	test_pivot;
-	test_poll_table;
 
 	--Print summary of results.
 	dbms_output.put_line(null);

@@ -117,11 +117,6 @@ CREATE OR REPLACE PACKAGE method4 AUTHID CURRENT_USER AS
             p_stmt               IN VARCHAR2,
             p_aggregate_function IN VARCHAR2 DEFAULT 'MAX'
             ) RETURN ANYDATASET PIPELINED USING method4_pivot_ot;
-   FUNCTION poll_table(
-            p_table_name              IN VARCHAR2,
-            p_sql_statement_condition IN VARCHAR2,
-            p_refresh_seconds         IN NUMBER DEFAULT 3
-            ) RETURN ANYDATASET PIPELINED USING method4_poll_table_ot;
 
    /*
    || Record types for use across multiple METHOD4 methods.
@@ -165,11 +160,6 @@ CREATE OR REPLACE PACKAGE method4 AUTHID CURRENT_USER AS
 
    --Common procedures used by multiple types.
    procedure purge_sql(p_search_string varchar2);
-
-   --Contexts used by METHOD4_POLL_TABLE.
-   procedure set_temp_object_id(p_temp_object_id varchar2);
-   procedure set_owner(p_owner varchar2);
-   procedure set_table_name(p_table_name varchar2);
 
 END method4;
 /

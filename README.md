@@ -69,23 +69,6 @@ Use the second parameter to change the aggregation function. For example, the be
     X
 
 
-**POLL_TABLE** This mode periodically polls a table and returns new rows until a condition is met. This can be useful for querying tables populated by an asynchronous process. See the package for more information on the parameters.
-
-    create table table1(a number) rowdependencies;
-    insert into table1 values(1);
-    commit;
-    
-    select * from table(method4.poll_table(
-       p_table_name              => 'table1',
-       p_sql_statement_condition => 'select 1 from dual',
-       p_refresh_seconds         => 2
-    ));
-    
-    Results:
-             A
-    ----------
-             1
-
 All modes convert LONGs to CLOBs, which can be helpful when querying the data dictionary. The string-literal-mode is a good way to understand how Data Cartridge and the ANY types work together. Compare the types `method4_ot` with `method4_dynamic_ot` to see how the query string can be intercepted and converted to do something interesting.
 
 These queries are powerful but they can also be confusing because of all the quotation marks required to build strings inside strings. Simplify your queries with the alternative quoting syntax (the "q" strings) and templating (use REPLACE instead of concatenating strings).

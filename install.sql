@@ -10,7 +10,6 @@ prompt Installing type specifications...
 @@code/method4_ot.tps
 @@code/method4_dynamic_ot.tps
 @@code/method4_pivot_ot.tps
-@@code/method4_poll_table_ot.tps
 prompt Installing package specification...
 @@code/method4.spc
 prompt Installing package body...
@@ -19,9 +18,6 @@ prompt Installing type bodies...
 @@code/method4_ot.tpb
 @@code/method4_dynamic_ot.tpb
 @@code/method4_pivot_ot.tpb
-@@code/method4_poll_table_ot.tpb
-prompt Creating context...
-create context method4_context using method4;
 
 prompt
 prompt **************************************************************************
