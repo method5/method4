@@ -21,7 +21,7 @@ prompt Installing type bodies...
 @@code/method4_pivot_ot.tpb
 @@code/method4_poll_table_ot.tpb
 prompt Creating context...
-create context method4_context using method4;
+create or replace context method4_context using method4;
 
 prompt
 prompt **************************************************************************

@@ -29,6 +29,15 @@ static function get_pivot_sql(p_sql in varchar2, p_aggregate_function in varchar
 	v_identifier_too_long_counter number := 0;
 	v_column varchar2(4000);
 
+	--Max size is 30 for early versions, and after 12.2 it can be determined through the constant ora_max_name_len.
+	c_ora_max_name_len constant number :=
+		$if    dbms_db_version.ver_le_9    $then 30
+		$elsif dbms_db_version.ver_le_10   $then 30
+		$elsif dbms_db_version.ver_le_11   $then 30
+		$elsif dbms_db_version.ver_le_12_1 $then 30
+		$else                                    ora_max_name_len
+	$end;
+
 	v_in_clause clob;
 	v_pivot_sql clob := '
 select * from
@@ -56,8 +65,8 @@ pivot (#AGGREGATE_FUNCTION#("#LAST_COLUMN#") for "#PENULTIMATE_COLUMN#" in (#IN_
 					v_new_column := p_columns(i).col_name || v_suffix;
 
 					--Shorten the name and add the suffix if it exceeds the max length.
-					if length(v_new_column) > ora_max_name_len then
-						v_new_column := substr(p_columns(i).col_name, 1, ora_max_name_len - length(v_suffix)) || v_suffix;
+					if length(v_new_column) > c_ora_max_name_len then
+						v_new_column := substr(p_columns(i).col_name, 1, c_ora_max_name_len - length(v_suffix)) || v_suffix;
 					--Otherwise simply add the suffix.
 					else
 						v_new_column := p_columns(i).col_name || v_suffix;
@@ -133,9 +142,9 @@ begin
 			end if;
 		else
 			--Shrink the name if necessary.
-			if length(v_pivot_columns(i)) > ora_max_name_len then
+			if length(v_pivot_columns(i)) > c_ora_max_name_len then
 				v_identifier_too_long_counter := v_identifier_too_long_counter + 1;
-				v_ordered_pivot_columns( substr(v_pivot_columns(i), 1, ora_max_name_len - 4)
+				v_ordered_pivot_columns( substr(v_pivot_columns(i), 1, c_ora_max_name_len - 4)
 					|| '_' || lpad(v_identifier_too_long_counter, 3, 0)) := v_pivot_columns(i);
 			else
 				v_ordered_pivot_columns(v_pivot_columns(i)) := v_pivot_columns(i);
