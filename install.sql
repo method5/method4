@@ -18,6 +18,8 @@ prompt Installing type bodies...
 @@code/method4_ot.tpb
 @@code/method4_dynamic_ot.tpb
 @@code/method4_pivot_ot.tpb
+prompt Creating context...
+create or replace context method4_context using method4;
 
 prompt
 prompt **************************************************************************
