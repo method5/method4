@@ -30,6 +30,25 @@ begin
 	end loop;
 end purge_sql;
 
+procedure check_for_null_stmt(stmt varchar2) is
+begin
+	if stmt is null then
+		raise_application_error(-20000,
+		replace(replace(q'[
+			The SQL statement parameter cannot be null and cannot use a bind variable. 
+			(This limitation is because dynamic table functions use ODCITableDescribe which is called 
+			at compile time and does not have access to bind variables.) 
+			If you are not intentionally using a bid variable you may need to check if the parameter 
+			CURSOR_SHARING is set to FORCE. 
+			You can override that parameter at the session level by running "alter session set 
+			cursor_sharing='exact'", and you can override the parameter at the statement level by 
+			using a hint like "select /*+ cursor_sharing_exact */ * from table(method4...". 
+			You may also need to run "alter system flush shared_pool" once to remove cached execution 
+			plans for the previous errors.
+		]', chr(10)), '	'));
+	end if;
+end check_for_null_stmt;
+
 procedure set_temp_object_id(p_temp_object_id varchar2) is
 begin
 	dbms_session.set_context('method4_context', 'temp_object_id', p_temp_object_id);

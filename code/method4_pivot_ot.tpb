@@ -261,6 +261,7 @@ end get_pivot_sql;
   BEGIN
       --Clear the old pivot SQL and get a new one.
       method4.r_pivot_sql := null;
+      method4.check_for_null_stmt(stmt);
       v_pivot_sql := get_pivot_sql(stmt, p_aggregate_function);
 
       /*

@@ -1012,6 +1012,71 @@ end test_poll_table;
 
 
 --------------------------------------------------------------------------------
+procedure test_binds_and_cursor_sharing is
+	v_actual varchar2(4000);
+begin
+	--Bind variables do not work, but Method4 raises a helpful error message.
+	begin
+		execute immediate q'[
+			declare
+				v_dummy varchar2(1);
+				v_sql varchar2(100) := 'select * from dual';
+			begin
+				select dummy into v_dummy from table(method4.query(v_sql));
+			end;
+		]';
+
+		assert_equals('Bind variables 1a', 'Exception', 'No Exception');
+	exception when others then
+		--Don't test the full message, but it should at least include the phrase "bind variable".
+		if sqlerrm like '%bind variable%' then
+			assert_equals('Bind variables 1b', 'Helpful error message', 'Helpful error message');
+		else
+			assert_equals('Bind variables 1c', 'Helpful error message', sqlerrm);
+		end if;
+	end;
+
+	--Remove cached plans and temporarily change the session setting for CURSOR_SHARING.
+	execute immediate 'alter session set cursor_sharing = ''force'' ';
+	execute immediate 'alter system flush shared_pool';
+
+	--CURSOR_SHARING=FORCE does not work, but Method4 raises a helpful error message.
+	begin
+		execute immediate q'[
+			select *
+			from table(method4.dynamic_query('select ''select * from dual'' from dual'))
+		]'
+		into v_actual;
+
+		assert_equals('Bind variables 2a', 'Exception', 'No Exception');
+	exception when others then
+		--Don't test the full message, but it should at least include the phrase "bind variable".
+		if sqlerrm like '%bind variable%' then
+			assert_equals('Bind variables 2b', 'Helpful error message', 'Helpful error message');
+		else
+			assert_equals('Bind variables 2c', 'Helpful error message', sqlerrm);
+		end if;
+	end;
+
+	--Hint CURSOR_SHARING_EXACT avoids the error.
+	begin
+		execute immediate q'[
+			select /*+ cursor_sharing_exact */ *
+			from table(method4.dynamic_query('select ''select * from dual'' from dual'))
+		]'
+		into v_actual;
+
+		assert_equals('Bind variables 3a', 'No Exception', 'No Exception');
+	exception when others then
+		assert_equals('Bind variables 3b', 'No Exception', sqlerrm);
+	end;
+
+	--Reset the parameter.
+	execute immediate 'alter session set cursor_sharing = ''exact''';
+end test_binds_and_cursor_sharing;
+
+
+--------------------------------------------------------------------------------
 procedure run is
 begin
 	--Reset counters.
@@ -1031,6 +1096,7 @@ begin
 	test_dynamic_query;
 	test_pivot;
 	test_poll_table;
+	test_binds_and_cursor_sharing;
 
 	--Print summary of results.
 	dbms_output.put_line(null);

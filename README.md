@@ -1,4 +1,4 @@
-`METHOD4` 2.2.2
+`METHOD4` 2.2.3
 ============
 
 Method4 is a PL/SQL application to run dynamic SQL in SQL.

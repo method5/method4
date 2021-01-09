@@ -10,7 +10,9 @@ CREATE OR REPLACE TYPE BODY method4_ot AS
       r_sql   method4.rt_dynamic_sql;
       v_rtype ANYTYPE;
 
-  BEGIN
+   BEGIN
+
+      method4.check_for_null_stmt(stmt);
 
       /*
       || Parse the SQL and describe its format and structure.

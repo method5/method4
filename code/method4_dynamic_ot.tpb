@@ -16,6 +16,9 @@ CREATE OR REPLACE TYPE BODY method4_dynamic_ot AS
 		--pre-defind table of varchar2(4000).
 		sql_statements sys.ku$_vcnt;
 	begin
+		--Check for bind variable/cursor_sharing problems.
+		method4.check_for_null_stmt(stmt);
+
 		--Use cached statement if available.
 		if method4.r_statement_cache.exists(stmt) then
 			v_new_stmt := method4.r_statement_cache(stmt);

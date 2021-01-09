@@ -1,6 +1,6 @@
 CREATE OR REPLACE PACKAGE method4 AUTHID CURRENT_USER AS
 
-   C_VERSION constant varchar2(10) := '2.2.2';
+   C_VERSION constant varchar2(10) := '2.2.3';
 
    /*
    || ---------------------------------------------------------------------------------
@@ -165,6 +165,7 @@ CREATE OR REPLACE PACKAGE method4 AUTHID CURRENT_USER AS
 
    --Common procedures used by multiple types.
    procedure purge_sql(p_search_string varchar2);
+   procedure check_for_null_stmt(stmt varchar2);
 
    --Contexts used by METHOD4_POLL_TABLE.
    procedure set_temp_object_id(p_temp_object_id varchar2);
