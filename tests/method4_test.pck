@@ -956,6 +956,102 @@ begin
 
 	--Teardown.
 	drop_table_ignore_not_exists('temp_method4_test');
+
+
+	--PIVOT_COLUMN_ID - simple example.
+	execute immediate q'<
+		select * from table(method4.pivot(
+		q'[
+			select 'a' name, 4 value, 4 pivot_column_id from dual union all
+			select 'b' name, 3 value, 3 pivot_column_id from dual union all
+			select 'c' name, 2 value, 2 pivot_column_id from dual union all
+			select 'd' name, 1 value, 1 pivot_column_id from dual
+		]'))
+	>' --'
+	into v_column1, v_column2, v_column3, v_column4;
+
+	assert_equals('Pivot - Simple 1.', '1', v_column1);
+	assert_equals('Pivot - Simple 2.', '2', v_column2);
+	assert_equals('Pivot - Simple 3.', '3', v_column3);
+	assert_equals('Pivot - Simple 4.', '4', v_column4);
+
+
+	--PIVOT_COLUMN_ID - simple but with column in different location.
+	--(It shouldn't matter where you put the PIVOT_COLUMN_ID.)
+	execute immediate q'<
+		select * from table(method4.pivot(
+		q'[
+			select 4 pivot_column_id, 'a' name, 4 value from dual union all
+			select 3 pivot_column_id, 'b' name, 3 value from dual union all
+			select 2 pivot_column_id, 'c' name, 2 value from dual union all
+			select 1 pivot_column_id, 'd' name, 1 value from dual
+		]'))
+	>' --'
+	into v_column1, v_column2, v_column3, v_column4;
+
+	assert_equals('Pivot - Simple 2 - 1.', '1', v_column1);
+	assert_equals('Pivot - Simple 2 - 2.', '2', v_column2);
+	assert_equals('Pivot - Simple 2 - 3.', '3', v_column3);
+	assert_equals('Pivot - Simple 2 - 4.', '4', v_column4);
+
+
+	--PIVOT_COLUMN_ID - min is used, ties broken by alphabetical column names, order column can be a string.
+	execute immediate q'<
+		select * from table(method4.pivot(
+		q'[
+			select 'C'  pivot_column_id, 'd' name, 4 value from dual union all
+			select 'C'  pivot_column_id, 'c' name, 3 value from dual union all
+			select 'B'  pivot_column_id, 'b' name, 2 value from dual union all
+			select 'ZZ' pivot_column_id, 'a' name, 1 value from dual union all
+			select 'A'  pivot_column_id, 'a' name, 1 value from dual
+		]'))
+	>' --'
+	into v_column1, v_column2, v_column3, v_column4;
+
+	assert_equals('Pivot - min/ties - 1.', '1', v_column1);
+	assert_equals('Pivot - min/ties - 2.', '2', v_column2);
+	assert_equals('Pivot - min/ties - 3.', '3', v_column3);
+	assert_equals('Pivot - min/ties - 4.', '4', v_column4);
+
+
+	--PIVOT_COLUMN_ID - with NULL and ambiguous column names.
+	execute immediate q'<
+		select null_column_name, c, b, a_1
+		from table(method4.pivot(
+		q'[
+			select 'A' A, 40 pivot_column_id, 'A' name , 4 value from dual union all
+			select 'A' A, 30 pivot_column_id, 'B' name , 3 value from dual union all
+			select 'A' A, 20 pivot_column_id, 'C' name , 2 value from dual union all
+			select 'A' A, 10 pivot_column_id, null name, 1 value from dual
+		]'))
+	>' --'
+	into v_column1, v_column2, v_column3, v_column4;
+
+	assert_equals('Pivot - null/ambiguous - 1.', '1', v_column1);
+	assert_equals('Pivot - null/ambiguous - 2.', '2', v_column2);
+	assert_equals('Pivot - null/ambiguous - 3.', '3', v_column3);
+	assert_equals('Pivot - null/ambiguous - 4.', '4', v_column4);
+
+
+	--PIVOT_COLUMN_ID - does not count as one of the required columns.
+	-- 1 column - raises exception.
+	declare
+		v_custom_exception exception;
+		pragma exception_init(v_custom_exception, -20000);
+	begin
+		execute immediate
+		q'<
+			select * from table(method4.pivot(q'[
+				select 1 A, 1 pivot_column_id from dual
+			]'))
+		>' --'
+		into v_column1;
+
+		assert_equals('Pivot - 1 column 1.', 'Exception', 'No exception');
+	exception when v_custom_exception then
+		assert_equals('Pivot - 1 column 2.', 'Exception', 'Exception');
+	end;
+
 end test_pivot;
 
 

@@ -10,12 +10,22 @@ static function get_pivot_sql(p_sql in varchar2, p_aggregate_function in varchar
 	v_col_cnt integer;
 	--This type only works in Oracle 10g+. It's necessary to support 128-byte column names.
 	v_columns dbms_sql.desc_tab2;
+	v_has_pivot_column_id boolean;
 
 	v_penultimate_column varchar2(128);
 	v_last_column varchar2(128);
 
-	v_distinct_sql clob;
-	v_pivot_columns sys.odcivarchar2list;
+	v_distinct_sql clob := '
+		select "#PENULTIMATE_COLUMN#"
+		from
+		(
+			#ORIGINAL_SQL#
+		)
+		group by "#PENULTIMATE_COLUMN#"
+		order by #1_OR_MIN_PIVOT_COLUMN_ID#';
+
+	v_pivot_column_names sys.dbms_debug_vc2coll;
+	v_pivot_column_values sys.dbms_debug_vc2coll := sys.dbms_debug_vc2coll();
 
 	c_numeric_magic_value constant varchar2(4000) := '-987654321.1234';
 	c_varchar_magic_value constant varchar2(4000) := 'Not a real value !@#1234';
@@ -23,11 +33,7 @@ static function get_pivot_sql(p_sql in varchar2, p_aggregate_function in varchar
 	v_has_null_column_name boolean := false;
 	v_nvl_column_list clob;
 
-
-	type string_aat is table of varchar2(4000) index by varchar2(4000);
-	v_ordered_pivot_columns string_aat;
 	v_identifier_too_long_counter number := 0;
-	v_column varchar2(4000);
 
 	--Max size is 30 for early versions, and after 12.2 it can be determined through the constant ora_max_name_len.
 	c_ora_max_name_len constant number :=
@@ -48,8 +54,33 @@ select * from
 )
 pivot (#AGGREGATE_FUNCTION#("#LAST_COLUMN#") for "#PENULTIMATE_COLUMN#" in (#IN_CLAUSE#))';
 
-	--Change pivot column names that match existing columns.
-	procedure change_ambiguous_column_names(p_ordered_pivot_columns in out string_aat, p_columns in dbms_sql.desc_tab2) is
+	--The PIVOT_COLUMN_ID column will be treated differently, so we need to remove it
+	--from the collection but have a flag to know we it exists.
+	procedure find_and_remove_pivot_col_id(p_columns in out dbms_sql.desc_tab2, p_has_pivot_column_id out boolean) is
+		v_columns_without_pivot_col_id dbms_sql.desc_tab2;
+		--Use this counters instead of "i" because the new collection may have a gap.
+		v_column_count number := 1;
+	begin
+		--Assume it's false if we don't find it.
+		p_has_pivot_column_id := false;
+
+		--Go through all columns, rebuild list with everything but PIVOT_COLUMN_ID.
+		for i in 1 .. p_columns.count loop
+			if v_columns(i).col_name = 'PIVOT_COLUMN_ID' then
+				p_has_pivot_column_id := true;
+			else
+				v_columns_without_pivot_col_id(v_column_count) := p_columns(i);
+				v_column_count := v_column_count + 1;
+			end if;
+		end loop;
+
+		p_columns := v_columns_without_pivot_col_id;
+	end find_and_remove_pivot_col_id;
+
+
+	--If one of the pivot columns shares a name with a regular column, change the pivot column name.
+	procedure change_ambiguous_column_names(p_pivot_column_names in out sys.dbms_debug_vc2coll, p_columns in dbms_sql.desc_tab2) is
+		v_current_column_name varchar2(32767);
 		v_new_column varchar2(4000);
 		v_counter number := 0;
 		v_suffix varchar2(4);
@@ -57,7 +88,8 @@ pivot (#AGGREGATE_FUNCTION#("#LAST_COLUMN#") for "#PENULTIMATE_COLUMN#" in (#IN_
 		--Look at all columns except the last two (which won't be in the final query).
 		for i in 1 .. p_columns.count - 2 loop
 			v_counter := 0;
-			if p_ordered_pivot_columns.exists(p_columns(i).col_name) then
+			v_current_column_name := p_columns(i).col_name;
+			if p_columns(i).col_name member of p_pivot_column_names then
 				--Look for an available name.
 				for j in v_counter .. 1000 loop
 					v_counter := v_counter + 1;
@@ -73,12 +105,19 @@ pivot (#AGGREGATE_FUNCTION#("#LAST_COLUMN#") for "#PENULTIMATE_COLUMN#" in (#IN_
 					end if;
 
 					--Quit this loop if the new name also already exists.
-					if p_ordered_pivot_columns.exists(v_new_column) then
+					if v_new_column member of p_pivot_column_names then
 						continue;
-					--Add new name, remove new name, and exit if the new name is distinct.
+					--Switch to the new name.
 					else
-						p_ordered_pivot_columns(v_new_column) := p_ordered_pivot_columns(p_columns(i).col_name);
-						p_ordered_pivot_columns.delete(p_columns(i).col_name);
+						--Find the index of the names that match and change the pivot_column_name.
+						for k in 1 .. p_pivot_column_names.count loop
+							if p_columns(i).col_name = p_pivot_column_names(k) then
+								p_pivot_column_names(k) := v_new_column;
+								exit;
+							end if;
+						end loop;
+
+						--Stop looping through suffixes after unused value was found and assigned.
 						exit;
 					end if;
 				end loop;
@@ -98,6 +137,8 @@ begin
 	dbms_sql.parse(v_cursor_id, p_sql, dbms_sql.native);
 	dbms_sql.describe_columns2(v_cursor_id, v_col_cnt, v_columns);
 
+	find_and_remove_pivot_col_id(v_columns, v_has_pivot_column_id);
+
 	--Must be at least two columns.
 	if v_columns.count <= 1 then
 		raise_application_error(-20000, 'The SQL statement must have at least two columns.');
@@ -115,54 +156,69 @@ begin
 	v_last_column        := v_columns(v_columns.count).col_name;
 
 	--Get a distinct set of values from the second-to-last column.
-	v_distinct_sql := 'select distinct "' || v_penultimate_column || '" from ' || chr(10) ||
-		'(' || chr(10) || p_sql || chr(10) || ') order by 1';
+	v_distinct_sql := replace(v_distinct_sql, '#PENULTIMATE_COLUMN#', v_penultimate_column);
+	v_distinct_sql := replace(v_distinct_sql, '#ORIGINAL_SQL#', p_sql);
+	if v_has_pivot_column_id then
+		v_distinct_sql := replace(v_distinct_sql, '#1_OR_MIN_PIVOT_COLUMN_ID#', 'min(pivot_column_id), 1');
+	else
+		v_distinct_sql := replace(v_distinct_sql, '#1_OR_MIN_PIVOT_COLUMN_ID#', '1');
+	end if;
 
 	declare
 		v_index_out_of_range exception;
 		pragma exception_init(v_index_out_of_range, -22165);
 	begin
-		execute immediate v_distinct_sql bulk collect into v_pivot_columns;
+		execute immediate v_distinct_sql bulk collect into v_pivot_column_names;
 	exception when v_index_out_of_range then
 		raise_application_error(-20000, 'The query contains more than 32K pivoting columns.');
 	end;
 
 	--Convert to a sorted associative array, handle nulls, handle columns larger than 30 or 128 bytes.
 	--In the associative array, the key is the column name and the value is the column value. (Not always the same thing.)
-	for i in 1 .. v_pivot_columns.count loop
-		if v_pivot_columns(i) is null then
+	for i in 1 .. v_pivot_column_names.count loop
+		v_pivot_column_values.extend;
+
+		if v_pivot_column_names(i) is null then
 			v_has_null_column_name := true;
 
 			--Use special value for numbers.
 			if v_columns(v_columns.count-1).col_type in (2, 100, 101) then
-				v_ordered_pivot_columns('NULL_COLUMN_NAME') := c_numeric_magic_value;
+				--v_ordered_pivot_columns('NULL_COLUMN_NAME') := c_numeric_magic_value;
+				v_pivot_column_names(i) := 'NULL_COLUMN_NAME';
+				v_pivot_column_values(i) := c_numeric_magic_value;
 			--Use special value for strings.
 			else
-				v_ordered_pivot_columns('NULL_COLUMN_NAME') := c_varchar_magic_value;
+				--v_ordered_pivot_columns('NULL_COLUMN_NAME') := c_varchar_magic_value;
+				v_pivot_column_names(i) := 'NULL_COLUMN_NAME';
+				v_pivot_column_values(i) := c_varchar_magic_value;
 			end if;
 		else
 			--Shrink the name if necessary.
-			if length(v_pivot_columns(i)) > c_ora_max_name_len then
+			if length(v_pivot_column_names(i)) > c_ora_max_name_len then
 				v_identifier_too_long_counter := v_identifier_too_long_counter + 1;
-				v_ordered_pivot_columns( substr(v_pivot_columns(i), 1, c_ora_max_name_len - 4)
-					|| '_' || lpad(v_identifier_too_long_counter, 3, 0)) := v_pivot_columns(i);
+				--v_ordered_pivot_columns( substr(v_pivot_column_names(i), 1, c_ora_max_name_len - 4)
+				--	|| '_' || lpad(v_identifier_too_long_counter, 3, 0)) := v_pivot_column_names(i);
+				v_pivot_column_values(i) := v_pivot_column_names(i);
+				v_pivot_column_names(i) := substr(v_pivot_column_names(i), 1, c_ora_max_name_len - 4)
+					|| '_' || lpad(v_identifier_too_long_counter, 3, 0);
 			else
-				v_ordered_pivot_columns(v_pivot_columns(i)) := v_pivot_columns(i);
+				--v_ordered_pivot_columns(v_pivot_column_names(i)) := v_pivot_column_names(i);
+				v_pivot_column_values(i) := v_pivot_column_names(i);
 			end if;
 		end if;
 	end loop;
 
 	--Remove pivot column names that match existing columns.
-	change_ambiguous_column_names(v_ordered_pivot_columns, v_columns);
+	change_ambiguous_column_names(v_pivot_column_names, v_columns);
 
 	--Create pivot SQL for normal cases with at least one dynamic column.
-	if v_ordered_pivot_columns.count >= 1 then
+	if v_pivot_column_names.count >= 1 then
 
-		-- Need to use NVL to handle NULL column names.
-		if v_has_null_column_name then
+		-- Need to list columns if therer is a NULL value or a PIVOT_COLUMN_ID.
+		if v_has_null_column_name or v_has_pivot_column_id then
 			for i in 1 .. v_columns.count loop
-				--Add NVL to penultimate column.
-				if i = v_columns.count - 1 then
+				--Add NVL to penultimate column if necessary.
+				if i = v_columns.count - 1 and v_has_null_column_name then
 					--Use a different magic value for numbers and string.
 					if v_columns(v_columns.count-1).col_type in (2, 100, 101) then
 						v_nvl_column_list := v_nvl_column_list || ', NVL("' || v_columns(i).col_name || '", ' || c_numeric_magic_value || ') "' || v_columns(i).col_name || '"';
@@ -189,21 +245,18 @@ begin
 		end if;
 
 		--Create the list of column names and values.
-		v_column := v_ordered_pivot_columns.first;
-		while v_column is not null loop
+		for i in 1 .. v_pivot_column_names.count loop
 
 			--Convert to numeric literal for number (2), float (100), or double (101)
 			if v_columns(v_columns.count-1).col_type in (2, 100, 101) then
-				v_in_clause := v_in_clause || v_ordered_pivot_columns(v_column) ||
-					' as "' || v_column||'", ';
+				v_in_clause := v_in_clause || v_pivot_column_values(i) ||
+					' as "' || v_pivot_column_names(i)||'", ';
 			--Convert to string literal otherwise.
 			else
 				v_in_clause := v_in_clause || '''' ||
-					replace(v_ordered_pivot_columns(v_column), '''', '''''') ||
-					''' as "'||v_column||'", ';
+					replace(v_pivot_column_values(i), '''', '''''') ||
+					''' as "'||v_pivot_column_names(i)||'", ';
 			end if;
-
-			v_column := v_ordered_pivot_columns.next(v_column);
 		end loop;
 
 		v_in_clause := substr(v_in_clause, 1, length(v_in_clause)-2);
@@ -215,7 +268,7 @@ begin
 		v_pivot_sql := replace(v_pivot_sql, '#IN_CLAUSE#', v_in_clause);
 
 	--Create pivot SQL where there are no rows and 3 or more columns - display everything but last two columns.
-	elsif v_ordered_pivot_columns.count = 0 and v_columns.count >= 3 then
+	elsif v_pivot_column_names.count = 0 and v_columns.count >= 3 then
 		v_pivot_sql := 'select ';
 
 		for i in 1 .. v_columns.count - 2 loop
@@ -229,7 +282,7 @@ begin
 		v_pivot_sql := v_pivot_sql || ' from '||chr(10)||'('||chr(10)||p_sql||chr(10)||')';
 
 	--Create pivot SQL where there are no rows and 2 columns - create fake column named "NO_RESULTS".
-	elsif v_ordered_pivot_columns.count = 0 and v_columns.count = 2 then
+	elsif v_pivot_column_names.count = 0 and v_columns.count = 2 then
 		v_pivot_sql := 'select cast(null as varchar2(1)) no_results from dual';
 	end if;
 
