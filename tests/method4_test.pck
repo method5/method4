@@ -1052,6 +1052,23 @@ begin
 		assert_equals('Pivot - 1 column 2.', 'Exception', 'Exception');
 	end;
 
+
+	-- Double quotation marks are converted to underscores.
+	--   select 'A' a, 'B"' b, 'C' c from dual =>
+	--   A  B_
+	--   -  -
+	--   A  C
+	execute immediate
+	q'<
+		select a, "B_" from table(method4.pivot(q'[
+			select 'A' a, 'B"' b, 'C' c from dual
+		]'))
+	>' --'
+	into v_column1, v_column2;
+
+	assert_equals('Double quotation mark 1.', 'A', v_column1);
+	assert_equals('Double quotation mark 2.', 'C', v_column2);
+
 end test_pivot;
 
 

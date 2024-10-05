@@ -1,4 +1,4 @@
-`METHOD4` 2.3.0
+`METHOD4` 2.3.1
 ============
 
 Method4 is a PL/SQL application to run dynamic SQL in SQL.
@@ -74,6 +74,7 @@ The dynamically generated column names are normally listed alphabetically, but a
     -  -  -
     1  1  1
 
+Double quotation marks are automatically converted to underscores, since double quotation marks are not allowed in Oracle quoted identifiers. If you want a different replacement character, you must manually REPLACE double quotation marks in your SQL statement.
 
 **QUERY** This function simply returns the results of a string literal:
 

@@ -206,6 +206,13 @@ begin
 				v_pivot_column_values(i) := v_pivot_column_names(i);
 			end if;
 		end if;
+
+		--Quoted identifiers cannot contain double quotation marks, so replace them with an underscore.
+		--Ideally, this replacement character would be an optional parameter, but there's a bizarre
+		--bug in ODCI where the second optional parameter gets mixed up with the first optional parameter.
+		if instr(v_pivot_column_names(i), '"') <> 0 then
+			v_pivot_column_names(i) := replace(v_pivot_column_names(i), '"', '_');
+		end if;
 	end loop;
 
 	--Remove pivot column names that match existing columns.
@@ -246,7 +253,6 @@ begin
 
 		--Create the list of column names and values.
 		for i in 1 .. v_pivot_column_names.count loop
-
 			--Convert to numeric literal for number (2), float (100), or double (101)
 			if v_columns(v_columns.count-1).col_type in (2, 100, 101) then
 				v_in_clause := v_in_clause || v_pivot_column_values(i) ||

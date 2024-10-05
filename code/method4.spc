@@ -1,6 +1,6 @@
 CREATE OR REPLACE PACKAGE method4 AUTHID CURRENT_USER AS
 
-   C_VERSION constant varchar2(10) := '2.3.0';
+   C_VERSION constant varchar2(10) := '2.3.1';
 
    /*
    || ---------------------------------------------------------------------------------
